@@ -780,7 +780,7 @@ function initImportExport() {
         const data = JSON.parse(e.target.result);
         chrome.runtime.sendMessage({ type: "import_settings", data }, (response) => {
           if (response?.success) {
-            showStatus("Imported! Reopen popup to see changes.", "success");
+            showStatus("Imported! Reopen popup (reload extension if rules look stale).", "success");
           } else {
             showStatus("Import failed: " + (response?.error ?? "unknown error"), "error");
           }

@@ -1,4 +1,6 @@
-// utils.js is loaded first via manifest background.scripts — do not importScripts again.// ─── In-memory state ─────────────────────────────────────────────────────────
+// utils.js is loaded first via manifest background.scripts — do not importScripts again.
+
+// ─── In-memory state ─────────────────────────────────────────────────────────
 
 let _profiles = [];
 let _activeProfileId = DEFAULT_PROFILE_ID;
@@ -203,7 +205,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message === "export_settings") {
     SyncStorage.get(["profiles", "activeProfileId"], (data) => {
       sendResponse({
-        version: "2.0",
+        version: "2.1",
+        bedagVersion: chrome.runtime.getManifest().version,
         exportedAt: new Date().toISOString(),
         profiles: data.profiles ?? [],
         activeProfileId: data.activeProfileId ?? DEFAULT_PROFILE_ID,
@@ -266,7 +269,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         profiles: normalized.profiles,
         activeProfileId: normalized.activeProfileId,
       },
-      () => sendResponse({ success: true })
+      () => {
+        _profiles = normalized.profiles;
+        _activeProfileId = normalized.activeProfileId;
+        loadState(() => {
+          fetchGoogleAccountsInBackground();
+          sendResponse({ success: true });
+        });
+      }
     );
     return true;
   }
@@ -376,20 +386,31 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   tabAuthHistory.delete(tabId);
 });
 
+function redirectCycleKey(url) {
+  try {
+    const u = new URL(url);
+    const auth = u.searchParams.get("authuser");
+    const um = u.pathname.match(/\/u\/(\d+)/);
+    const idx = auth !== null && auth !== "" ? auth : um ? um[1] : "none";
+    return `${u.origin}${u.pathname}|${idx}`;
+  } catch {
+    return url;
+  }
+}
+
 function detectRedirectCycle(redirectUrl) {
   const currentTime = Date.now();
-  if (last4RedirectUrls.length === 0) {
-    last4RedirectUrls.push({ time: currentTime, redirectUrl });
-    return false;
+  const key = redirectCycleKey(redirectUrl);
+  if (last4RedirectUrls.length > 0) {
+    const last = last4RedirectUrls[last4RedirectUrls.length - 1];
+    if (currentTime - last.time > maxRedirectTimeMS) last4RedirectUrls = [];
   }
-  const lastRedirect = last4RedirectUrls[last4RedirectUrls.length - 1];
-  if (currentTime - lastRedirect.time > maxRedirectTimeMS) {
-    last4RedirectUrls = [];
-  }
-  if (lastRedirect.redirectUrl === redirectUrl) {
-    last4RedirectUrls.push({ time: currentTime, redirectUrl });
-  }
-  return last4RedirectUrls.length >= 4;
+  last4RedirectUrls.push({ time: currentTime, redirectUrl, key });
+  last4RedirectUrls = last4RedirectUrls.filter((r) => currentTime - r.time <= maxRedirectTimeMS);
+  if (last4RedirectUrls.length < 4) return false;
+  const keys = last4RedirectUrls.map((r) => r.key);
+  if (new Set(keys).size <= 2) return true;
+  return last4RedirectUrls.every((r) => r.redirectUrl === last4RedirectUrls[0].redirectUrl);
 }
 
 function isCustomServiceUrl(url) {
@@ -409,6 +430,7 @@ function isCustomServiceUrl(url) {
 }
 
 function shouldInterceptUrl(url) {
+  if (shouldIgnoreRedirectUrl(url)) return false;
   return isGoogleServiceUrl(url) || isCustomServiceUrl(url);
 }
 
@@ -445,20 +467,30 @@ chrome.webRequest.onBeforeRequest.addListener(
 chrome.tabs.onCreated.addListener((tab) => {
   const url = tab.pendingUrl || tab.url;
   if (!url || !shouldInterceptUrl(url)) return;
-  if (shouldSuppressTabRedirect(tab.id)) return;
 
-  const result = resolveRedirectForUrl(
-    url,
-    _settings,
-    _profiles,
-    _activeProfileId,
-    _accounts
-  );
-  if (!result?.redirectUrl) return;
-  if (detectRedirectCycle(result.redirectUrl)) return;
+  const applyNewTabRedirect = () => {
+    if (shouldSuppressTabRedirect(tab.id)) return;
+    const result = resolveRedirectForUrl(
+      url,
+      _settings,
+      _profiles,
+      _activeProfileId,
+      _accounts
+    );
+    if (!result?.redirectUrl) return;
+    if (detectRedirectCycle(result.redirectUrl)) return;
+    recordTabRedirectTarget(tab.id, result.accountId);
+    chrome.tabs.update(tab.id, { url: result.redirectUrl });
+  };
 
-  recordTabRedirectTarget(tab.id, result.accountId);
-  chrome.tabs.update(tab.id, { url: result.redirectUrl });
+  if (tab.openerTabId) {
+    chrome.tabs.get(tab.openerTabId, (opener) => {
+      if (opener?.url && isAnyGoogleUrl(opener.url)) return;
+      applyNewTabRedirect();
+    });
+  } else {
+    applyNewTabRedirect();
+  }
 });
 
 chrome.webNavigation.onCommitted.addListener((details) => {

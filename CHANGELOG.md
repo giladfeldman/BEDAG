@@ -9,6 +9,27 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 ---
 
+## [1.0.2] — 2026-05-30
+
+### Fixed
+
+- **Flights vs Travel** — `/travel/flights` no longer matches the Travel rule; scoring prefers Flights on flight URLs
+- **Account 0** — Removes `authuser` / `/u/N` instead of setting `authuser=0` (reduces Google ping-pong)
+- **Auth/sign-in URLs** — No redirects on `accounts.google.com`, sign-in paths, or similar
+- **Import** — Background reloads profiles and refreshes accounts immediately after import
+- **Redirect cycles** — Detects alternating `authuser` indices, not only identical URLs
+- **New tabs** — Skips redirect when opened from an existing Google tab (avoids double redirect)
+- **Rules** — Ignores rules with non-numeric `accountId` during matching
+- **Docs subpaths** — Higher match score for Docs/Sheets/Slides/Forms on `docs.google.com`
+- **service-worker.js** — Restored corrupted first-line comment
+
+### Added
+
+- `docs/CODE_REVIEW.md` — Review notes and residual risks
+- `SECURITY.md` — Permissions and reporting
+- Export payload: `bedagVersion`, format version `2.1`
+- Expanded `scripts/test-url-match.js` assertions
+
 ## [1.0.1] — 2026-05-30
 
 ### Fixed

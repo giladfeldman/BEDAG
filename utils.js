@@ -61,9 +61,25 @@ function convertToRedirectUrl(originalUrl, accountId) {
 }
 
 function convertAuthUserUrl(url, accountId) {
+  const originalHref = url.href;
   const params = new URLSearchParams(url.search);
+  const uMatch = originalHref.match(/\/u\/(\d+)\/?/i);
+
+  if (accountId === 0) {
+    const hadAuth = params.has("authuser");
+    const hadUPath = Boolean(uMatch);
+    params.delete("authuser");
+    url.search = params.toString();
+    let out = url.toString();
+    if (hadUPath) {
+      out = out.replace(/\/u\/\d+\/?/i, "/");
+    }
+    if (!hadAuth && !hadUPath) return null;
+    if (out === originalHref) return null;
+    return out;
+  }
+
   if (`${params.get("authuser")}` === `${accountId}`) return null;
-  const uMatch = url.href.match(/\/u\/(\d+)\/?/i);
   if (uMatch && uMatch[1] && `${uMatch[1]}` === `${accountId}`) return null;
   params.delete("authuser");
   params.set("authuser", accountId);
@@ -125,7 +141,10 @@ function urlMatchesServiceRule(serviceName, url) {
     return /^https?:\/\/(www\.)?google\.co(m|\.[a-z]{2,3})\/(?:travel\/flights|flights)/i.test(url);
   }
   if (name === "travel") {
-    return /^https?:\/\/(www\.)?google\.co(m|\.[a-z]{2,3})\/travel/i.test(url);
+    return (
+      /^https?:\/\/(www\.)?google\.co(m|\.[a-z]{2,3})\/travel/i.test(url) &&
+      !/\/travel\/flights/i.test(url)
+    );
   }
   if (name === "shopping") {
     return /^https?:\/\/(www\.)?google\.co(m|\.[a-z]{2,3})\/shopping/i.test(url);
@@ -156,12 +175,6 @@ function urlMatchesServiceRule(serviceName, url) {
   }
   if (name === "adwords" || name === "ads") {
     return /^https?:\/\/[^?&]*(?:ads|adwords)\.google\.co.*/i.test(url);
-  }
-  if (name === "shopping") {
-    return (
-      /^https?:\/\/(www\.)?google\.co(m|\.[a-z]{2,3})\/shopping/i.test(url) ||
-      /^https?:\/\/[^?&]*shopping\.google\.co.*/i.test(url)
-    );
   }
   if (name === "pay") {
     return /^https?:\/\/[^?&]*pay\.google\.co.*/i.test(url);
@@ -215,6 +228,11 @@ function ruleMatchScore(rule, url) {
   if (!name) return 20;
 
   if (name === "search") return 10;
+  if (name === "flights" && /\/(?:travel\/flights|flights)/i.test(url)) return 85;
+  if (name === "travel" && /\/travel/i.test(url)) return 75;
+  if (name === "docs" && /docs\.google\.com\/(document|spreadsheets|presentation|forms)/i.test(url)) {
+    return 88;
+  }
   if (name === "sheets" && /docs\.google\.com\/spreadsheets/i.test(url)) return 95;
   if (name === "slides" && /docs\.google\.com\/presentation/i.test(url)) return 95;
   if (name === "forms" && /docs\.google\.com\/forms/i.test(url)) return 95;
@@ -296,6 +314,7 @@ function getAccountForUrl(url, rules, fallbackAccount) {
   let bestScore = -1;
   let bestAccount = fallbackAccount;
   for (const rule of rules ?? []) {
+    if (typeof rule.accountId !== "number") continue;
     const score = ruleMatchScore(rule, url);
     if (score > bestScore) {
       bestScore = score;
@@ -303,6 +322,37 @@ function getAccountForUrl(url, rules, fallbackAccount) {
     }
   }
   return bestAccount;
+}
+
+/** Auth flows and telemetry — never inject authuser here. */
+function shouldIgnoreRedirectUrl(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname;
+    if (
+      host.startsWith("accounts.") ||
+      host.startsWith("ogs.") ||
+      host.startsWith("apis.") ||
+      host.startsWith("clients1.") ||
+      host.includes("googleusercontent.com")
+    ) {
+      return true;
+    }
+    const path = u.pathname;
+    if (
+      path.startsWith("/signin") ||
+      path.startsWith("/ServiceLogin") ||
+      path.startsWith("/Logout") ||
+      path.startsWith("/gen_204") ||
+      path.startsWith("/_/") ||
+      path.includes("/widget/")
+    ) {
+      return true;
+    }
+  } catch {
+    return true;
+  }
+  return false;
 }
 
 function getAccountByIndex(accounts, accountIndex) {
@@ -432,6 +482,7 @@ function currentAccountFromUrl(url) {
 /** Shared redirect decision for webRequest + tab updates. */
 function resolveRedirectForUrl(url, settings, profiles, activeProfileId, accounts) {
   if (!url || typeof url !== "string") return null;
+  if (shouldIgnoreRedirectUrl(url)) return null;
   if (url.includes("docs.google") && url.includes("/create")) return null;
 
   const prof = getActiveProfile(profiles, activeProfileId);
