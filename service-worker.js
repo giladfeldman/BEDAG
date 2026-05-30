@@ -294,7 +294,7 @@ function redirectSpecificTabs(tabIds) {
 }
 
 function applyRedirectToTab(tabId, url) {
-  if (!url) return;
+  if (!url || shouldSuppressTabRedirect(tabId)) return;
   const result = resolveRedirectForUrl(
     url,
     _settings,
@@ -302,15 +302,79 @@ function applyRedirectToTab(tabId, url) {
     _activeProfileId,
     _accounts
   );
-  if (result?.redirectUrl) {
-    chrome.tabs.update(tabId, { url: result.redirectUrl });
-  }
+  if (!result?.redirectUrl) return;
+  if (detectRedirectCycle(result.redirectUrl)) return;
+  recordTabRedirectTarget(tabId, result.accountId);
+  chrome.tabs.update(tabId, { url: result.redirectUrl });
 }
 
 // ─── Request interception (primary — same approach as original extension) ─────
 
 let last4RedirectUrls = [];
 const maxRedirectTimeMS = 250;
+
+/** Per-tab authuser ping-pong detection (Maps often fights authuser=1 vs 0). */
+const tabAuthHistory = new Map();
+const TAB_PING_PONG_WINDOW_MS = 4000;
+const TAB_SUPPRESS_MS = 45000;
+
+function authuserFromUrlString(url) {
+  try {
+    const u = new URL(url);
+    const auth = u.searchParams.get("authuser");
+    if (auth !== null && auth !== "") return parseInt(auth, 10);
+    const m = u.pathname.match(/\/u\/(\d+)/);
+    if (m) return parseInt(m[1], 10);
+  } catch {}
+  return null;
+}
+
+function noteTabAuthNavigation(tabId, url) {
+  if (tabId < 0 || !url) return;
+  const auth = authuserFromUrlString(url);
+  if (auth === null) return;
+
+  const now = Date.now();
+  const state = tabAuthHistory.get(tabId) ?? { samples: [], suppressUntil: 0 };
+  const last = state.samples[state.samples.length - 1];
+
+  if (!last || last.auth !== auth) {
+    state.samples.push({ auth, t: now });
+  }
+  state.samples = state.samples.filter((s) => now - s.t < TAB_PING_PONG_WINDOW_MS);
+
+  if (state.samples.length >= 4) {
+    let alternations = 0;
+    for (let i = 1; i < state.samples.length; i++) {
+      if (state.samples[i].auth !== state.samples[i - 1].auth) alternations++;
+    }
+    if (alternations >= 3) {
+      state.suppressUntil = now + TAB_SUPPRESS_MS;
+      state.samples = [];
+    }
+  }
+
+  tabAuthHistory.set(tabId, state);
+}
+
+function shouldSuppressTabRedirect(tabId) {
+  if (tabId < 0) return false;
+  const state = tabAuthHistory.get(tabId);
+  return state ? Date.now() < state.suppressUntil : false;
+}
+
+function recordTabRedirectTarget(tabId, accountId) {
+  if (tabId < 0) return;
+  const now = Date.now();
+  const state = tabAuthHistory.get(tabId) ?? { samples: [], suppressUntil: 0 };
+  state.samples.push({ auth: accountId, t: now });
+  state.samples = state.samples.filter((s) => now - s.t < TAB_PING_PONG_WINDOW_MS);
+  tabAuthHistory.set(tabId, state);
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  tabAuthHistory.delete(tabId);
+});
 
 function detectRedirectCycle(redirectUrl) {
   const currentTime = Date.now();
@@ -357,6 +421,9 @@ chrome.webRequest.onBeforeRequest.addListener(
     if (details.method !== "GET") return;
     if (!shouldInterceptUrl(details.url)) return;
 
+    noteTabAuthNavigation(details.tabId, details.url);
+    if (shouldSuppressTabRedirect(details.tabId)) return;
+
     const result = resolveRedirectForUrl(
       details.url,
       _settings,
@@ -368,6 +435,7 @@ chrome.webRequest.onBeforeRequest.addListener(
 
     if (detectRedirectCycle(result.redirectUrl)) return;
 
+    recordTabRedirectTarget(details.tabId, result.accountId);
     return { redirectUrl: result.redirectUrl };
   },
   { types: ["main_frame"], urls: ["<all_urls>"] },
@@ -377,6 +445,7 @@ chrome.webRequest.onBeforeRequest.addListener(
 chrome.tabs.onCreated.addListener((tab) => {
   const url = tab.pendingUrl || tab.url;
   if (!url || !shouldInterceptUrl(url)) return;
+  if (shouldSuppressTabRedirect(tab.id)) return;
 
   const result = resolveRedirectForUrl(
     url,
@@ -386,12 +455,21 @@ chrome.tabs.onCreated.addListener((tab) => {
     _accounts
   );
   if (!result?.redirectUrl) return;
+  if (detectRedirectCycle(result.redirectUrl)) return;
 
+  recordTabRedirectTarget(tab.id, result.accountId);
   chrome.tabs.update(tab.id, { url: result.redirectUrl });
 });
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
+  // webRequest handles most loads; only fill in URLs with no account marker yet.
+  if (_settings.enforceOnPrecachedUrls) {
+    if (/[?&]authuser=\d/i.test(details.url) || /\/u\/\d+\b/i.test(details.url)) return;
+  } else if (/authuser/i.test(details.url) || /\/u\/\d+/i.test(details.url)) {
+    return;
+  }
+  if (shouldSuppressTabRedirect(details.tabId)) return;
   applyRedirectToTab(details.tabId, details.url);
 });
 }

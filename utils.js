@@ -364,11 +364,8 @@ function mapAccountRow(info, arrayIndex) {
   }
   if (!email) return null;
 
-  let index = arrayIndex;
-  if (info[7] !== undefined && info[7] !== null && `${info[7]}` !== "") {
-    const parsed = parseInt(info[7], 10);
-    if (!isNaN(parsed)) index = parsed;
-  }
+  // authuser=N in Google URLs is the account's position in ListAccounts order, not field [7].
+  const index = arrayIndex;
 
   const name = (typeof info[2] === "string" && info[2]) || email.split("@")[0];
 
@@ -465,6 +462,8 @@ function resolveRedirectForUrl(url, settings, profiles, activeProfileId, account
   if (settings.enforceOnPrecachedUrls) {
     const current = currentAccountFromUrl(url);
     if (current !== null && current === accountId) return null;
+    // Google often omits authuser=0; treat bare maps URL as already on default account.
+    if (current === null && accountId === 0) return null;
   }
 
   const redirectUrl = convertToRedirectUrl(url, accountId);

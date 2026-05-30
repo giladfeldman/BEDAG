@@ -9,6 +9,14 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 ---
 
+## [1.0.1] — 2026-05-30
+
+### Fixed
+
+- **Maps authuser loop** (`?authuser=1` ↔ `?authuser=0`) — per-tab ping-pong detection stops fighting Google when it rejects an account index; `webNavigation` no longer re-redirects URLs that already have `authuser`
+- **Account index** — `authuser=N` now follows ListAccounts **row order** only (field `[7]` was not always the authuser index and could force the wrong account)
+- Treat URLs with no `authuser` param as already on account 0 when the rule targets 0 (Google often omits `authuser=0`)
+
 ## [1.0.0] — 2026-05-30
 
 ### Added

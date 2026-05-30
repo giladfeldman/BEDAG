@@ -44,3 +44,16 @@ const result = resolveRedirectForUrl(
   [{ index: 1, email: "filination@gmail.com", isLoggedIn: true }]
 );
 console.log("Redirect:", result);
+
+const noAuthMaps = "https://www.google.com/maps/";
+const rulesDefault0 = [
+  { serviceName: "Maps", serviceUrl: "google.com/maps", accountId: 0, accountEmail: "a@x.com" },
+];
+const noRedirect = resolveRedirectForUrl(
+  noAuthMaps,
+  { enforceOnPrecachedUrls: true },
+  [{ id: "default", defaultAccount: 0, rules: rulesDefault0 }],
+  "default",
+  []
+);
+console.log("Maps account 0 bare URL (expect null):", noRedirect);
