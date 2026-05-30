@@ -1,23 +1,40 @@
-# IDEs and editors
-/.idea
+# Personal exports / backups (never commit real account rules)
+*-profiles.json
+*-settings.json
+gilad-*.json
+!examples/
+
+# Build artifacts
+/dist/
+*.zip
+*.xpi
+
+# Environment / secrets
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.sublime-workspace
 .project
 .classpath
 .c9/
 *.launch
 .settings/
-*.sublime-workspace
+
+# Dropbox / sync noise
 *.icloud
 * 2
 * 2.*
-.env.development
 
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-
-# System Files
-.DS_Store
-Thumbs.db
+# Cursor / local agent (not part of the extension)
+.cursor/
+agent-transcripts/
+agent-tools/

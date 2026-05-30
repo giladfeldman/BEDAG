@@ -5,6 +5,7 @@ window.App = {
   activeProfileId: DEFAULT_PROFILE_ID,
   viewedProfileId: DEFAULT_PROFILE_ID,
   accounts: [],
+  accountsFetchError: null,
   settings: { ...DEFAULT_SETTINGS },
 
   get activeProfile() {
@@ -24,21 +25,122 @@ window.App = {
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
-loadProfiles((data) => {
-  App.profiles = data.profiles;
-  App.activeProfileId = data.activeProfileId;
-  App.viewedProfileId = data.activeProfileId;
-  App.accounts = data.accounts;
+function bootFromStorage() {
+  loadProfiles((data) => {
+    App.profiles = data.profiles;
+    App.activeProfileId = data.activeProfileId;
+    App.viewedProfileId = data.activeProfileId;
+    App.accounts = data.accounts;
 
-  loadSettings((s) => {
-    App.settings = s;
-    renderProfileBar();
-    renderQuickSwitch();
-    renderRulesSummary();
-    window.dispatchEvent(new CustomEvent("app:ready"));
+    loadSettings((s) => {
+      App.settings = s;
+      renderProfileBar();
+      renderQuickSwitch();
+      renderRulesSummary();
+      window.dispatchEvent(new CustomEvent("app:ready"));
+    });
+
+    fetchAndStoreAccounts();
   });
+}
 
-  fetchAndStoreAccounts();
+function showMigrationBanner(text, showRepair) {
+  const banner = document.getElementById("migration-banner");
+  const label = document.getElementById("migration-banner-text");
+  if (!banner || !label) return;
+  label.textContent = text;
+  banner.classList.remove("hidden");
+
+  let repairBtn = document.getElementById("migration-repair-btn");
+  if (showRepair) {
+    if (!repairBtn) {
+      repairBtn = document.createElement("button");
+      repairBtn.id = "migration-repair-btn";
+      repairBtn.type = "button";
+      repairBtn.className = "banner-btn banner-btn-yes migration-repair-btn";
+      repairBtn.textContent = "Try import again";
+      banner.appendChild(repairBtn);
+    }
+    repairBtn.onclick = () => {
+      chrome.runtime.sendMessage("try_migrate_legacy", (result) => {
+        bootFromStorage();
+        if (result?.migrated && result.ruleCount > 0) {
+          showMigrationBanner(
+            "Imported " + result.ruleCount + " rule(s) from previous extension storage.",
+            false
+          );
+        } else {
+          explainEmptyStorage(result?.diagnostics);
+        }
+      });
+    };
+    repairBtn.classList.remove("hidden");
+  } else if (repairBtn) {
+    repairBtn.classList.add("hidden");
+  }
+}
+
+function explainEmptyStorage(diagnostics) {
+  chrome.runtime.sendMessage("check_extension_conflicts", (conflict) => {
+    if (conflict?.officialEnabled) {
+      showMigrationBanner(
+        "The official “" +
+          (conflict.officialName || "Default Google Account") +
+          "” add-on is still enabled. Disable it in about:addons so only this extension redirects. Import rules via Settings → Import / Export (see docs/MIGRATION.md).",
+        false
+      );
+      return;
+    }
+
+    if (diagnostics?.hasLegacyRulesAtRoot && diagnostics?.canAutoMigrate) {
+      showMigrationBanner(
+        "Found " +
+          diagnostics.rootRuleCount +
+          " rule(s) in imported data. Click Try import again to merge into profiles.",
+        true
+      );
+      return;
+    }
+
+    showMigrationBanner(
+      "No rules saved yet. Import a JSON backup or add rules under Settings. See docs/MIGRATION.md on GitHub.",
+      false
+    );
+  });
+}
+
+function checkExtensionConflicts() {
+  chrome.runtime.sendMessage("check_extension_conflicts", (res) => {
+    if (res?.officialEnabled) {
+      showMigrationBanner(
+        "Disable the official “" +
+          (res.officialName || "Default Google Account") +
+          "” add-on in about:addons. Only one redirect extension should be enabled. Import your rules via Settings → Import / Export.",
+        false
+      );
+    }
+  });
+}
+
+chrome.runtime.sendMessage("try_migrate_legacy", (result) => {
+  bootFromStorage();
+  if (result?.migrated && result.ruleCount > 0) {
+    showMigrationBanner(
+      "Merged " + result.ruleCount + " rule(s) into your Default profile.",
+      false
+    );
+  } else {
+    const d = result?.diagnostics;
+    if (d?.hasLegacyRulesAtRoot && d.canAutoMigrate) {
+      showMigrationBanner(
+        "Found " + d.rootRuleCount + " imported rule(s). Click Try import again to merge into profiles.",
+        true
+      );
+    } else {
+      explainEmptyStorage(d);
+    }
+  }
+  checkExtensionConflicts();
 });
 
 chrome.storage.onChanged.addListener(() => {
@@ -58,22 +160,122 @@ chrome.storage.onChanged.addListener(() => {
 
 // ─── Account fetching ─────────────────────────────────────────────────────────
 
+function applyFetchedAccounts(accounts) {
+  App.accounts = accounts;
+  App.accountsFetchError = null;
+  SyncStorage.store({ accounts }, () => {
+    if (rebindRuleAccountIds(App.profiles, accounts)) {
+      App.saveProfiles(() => {
+        renderQuickSwitch();
+        renderRulesSummary();
+        window.dispatchEvent(new CustomEvent("app:updated"));
+      });
+      return;
+    }
+    renderQuickSwitch();
+    renderRulesSummary();
+    window.dispatchEvent(new CustomEvent("app:updated"));
+  });
+}
+
+/** Popup fallback when background is not reachable (e.g. after a bad reload). */
+function fetchAccountsViaPopupTab(done) {
+  pickGoogleTabIdForPopup((tabId, createdTab) => {
+    if (!tabId) {
+      done(null, "Open https://www.google.com in a tab (signed in), then click Refresh.");
+      return;
+    }
+    chrome.tabs.executeScript(
+      tabId,
+      { code: buildListAccountsInjectCode() },
+      (results) => {
+        if (createdTab) chrome.tabs.remove(tabId);
+        if (chrome.runtime.lastError) {
+          done(null, chrome.runtime.lastError.message);
+          return;
+        }
+        const accounts = accountsFromListAccountsText(results?.[0]);
+        if (!accounts.length) {
+          done(null, "No accounts returned from Google. Stay signed in and try again.");
+          return;
+        }
+        done(accounts, null);
+      }
+    );
+  });
+}
+
+function pickGoogleTabIdForPopup(callback) {
+  chrome.tabs.query({ active: true, currentWindow: true }, (activeTabs) => {
+    const active = activeTabs?.[0];
+    if (active?.id && active.url && isAnyGoogleUrl(active.url)) {
+      callback(active.id, false);
+      return;
+    }
+    chrome.tabs.query({ url: ["*://*.google.com/*"] }, (tabs) => {
+      if (tabs?.length) {
+        callback(tabs[0].id, false);
+        return;
+      }
+      chrome.tabs.create({ url: "https://www.google.com/", active: false }, (tab) => {
+        if (!tab?.id) {
+          callback(null, false);
+          return;
+        }
+        const onUpdated = (tabId, info) => {
+          if (tabId !== tab.id || info.status !== "complete") return;
+          chrome.tabs.onUpdated.removeListener(onUpdated);
+          callback(tab.id, true);
+        };
+        chrome.tabs.onUpdated.addListener(onUpdated);
+      });
+    });
+  });
+}
+
 function fetchAndStoreAccounts() {
-  chrome.runtime.sendMessage("fetch_google_accounts", (response) => {
-    if (!response || !response[1]) return;
-    const accounts = response[1].map((info) => ({
-      index: info[7],
-      name: info[2],
-      email: info[3],
-      profileUrl: info[4],
-      isLoggedIn: info.length >= 16,
-    }));
-    SyncStorage.store({ accounts }, () => {
-      App.accounts = accounts;
+  App.accountsFetchError = null;
+
+  const finish = (accounts, err) => {
+    if (!accounts?.length) {
+      App.accountsFetchError = err || "Could not load Google accounts.";
       renderQuickSwitch();
       renderRulesSummary();
-      window.dispatchEvent(new CustomEvent("app:updated"));
-    });
+      return;
+    }
+    applyFetchedAccounts(accounts);
+  };
+
+  chrome.runtime.sendMessage("fetch_google_accounts", (response) => {
+    if (chrome.runtime.lastError) {
+      const msg = chrome.runtime.lastError.message || "";
+      const backgroundDead = /receiving end does not exist/i.test(msg);
+      if (backgroundDead) {
+        fetchAccountsViaPopupTab((accounts, err) => {
+          if (accounts?.length) finish(accounts, null);
+          else {
+            App.accountsFetchError =
+              (err || msg) +
+              " Reload this extension in about:debugging (click Reload on the add-on).";
+            renderQuickSwitch();
+            renderRulesSummary();
+          }
+        });
+        return;
+      }
+      finish(null, msg);
+      return;
+    }
+
+    const accounts = response?.accounts ?? [];
+    if (!accounts.length) {
+      fetchAccountsViaPopupTab((fallbackAccounts, err) => {
+        if (fallbackAccounts?.length) finish(fallbackAccounts, null);
+        else finish(null, response?.error || err);
+      });
+      return;
+    }
+    finish(accounts, null);
   });
 }
 
@@ -115,31 +317,53 @@ function renderQuickSwitch() {
   const body = document.getElementById("quick-switch-body");
   body.innerHTML = "";
 
+  if (App.accountsFetchError && !App.accounts.length) {
+    const err = document.createElement("div");
+    err.className = "qs-empty qs-empty--error";
+    err.textContent = App.accountsFetchError;
+    body.appendChild(err);
+    const hint = document.createElement("div");
+    hint.className = "qs-hint";
+    hint.textContent =
+      "Tip: open https://www.google.com in a tab (signed in), then click Refresh above.";
+    body.appendChild(hint);
+    return;
+  }
+
+  if (!App.accounts.length) {
+    body.innerHTML =
+      '<div class="qs-empty">Loading Google accounts…</div>';
+    return;
+  }
+
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const tabUrl = tabs?.[0]?.url ?? "";
+    const onGoogle = tabUrl && isGoogleServiceUrl(tabUrl);
 
-    if (!tabUrl || !isGoogleServiceUrl(tabUrl)) {
-      body.innerHTML = '<div class="qs-empty">Current tab is not a Google page.</div>';
-      return;
+    if (!onGoogle) {
+      const hint = document.createElement("div");
+      hint.className = "qs-hint";
+      hint.textContent =
+        "Signed-in accounts (open a Google page to switch this tab):";
+      body.appendChild(hint);
     }
 
-    if (!App.accounts.length) {
-      body.innerHTML = '<div class="qs-empty">No accounts detected yet.</div>';
-      return;
+    let currentAccount = null;
+    if (onGoogle) {
+      try {
+        const u = new URL(tabUrl);
+        const auth = u.searchParams.get("authuser");
+        if (auth !== null) currentAccount = parseInt(auth, 10) || 0;
+        const m = u.pathname.match(/\/u\/(\d+)/);
+        if (m) currentAccount = parseInt(m[1], 10) || 0;
+      } catch {}
     }
-
-    let currentAccount = 0;
-    try {
-      const u = new URL(tabUrl);
-      const auth = u.searchParams.get("authuser");
-      if (auth !== null) currentAccount = parseInt(auth) || 0;
-      const m = u.pathname.match(/\/u\/(\d+)/);
-      if (m) currentAccount = parseInt(m[1]) || 0;
-    } catch {}
 
     for (const user of App.accounts) {
       const row = document.createElement("div");
-      row.className = "qs-row" + (user.index === currentAccount ? " qs-row--current" : "");
+      row.className =
+        "qs-row" +
+        (onGoogle && user.index === currentAccount ? " qs-row--current" : "");
 
       const avatar = document.createElement("div");
       avatar.className = "qs-avatar";
@@ -158,7 +382,7 @@ function renderQuickSwitch() {
       nameEl.textContent = user.name;
       const emailEl = document.createElement("div");
       emailEl.className = "qs-email";
-      emailEl.textContent = user.email;
+      emailEl.textContent = `${user.index + 1}) ${user.email}`;
       info.appendChild(nameEl);
       info.appendChild(emailEl);
 
@@ -170,23 +394,29 @@ function renderQuickSwitch() {
         badge.className = "qs-badge";
         badge.textContent = "Signed out";
         row.appendChild(badge);
-        row.onclick = () => openSignInForAccount(user);
-      } else if (user.index === currentAccount) {
+        if (onGoogle) row.onclick = () => openSignInForAccount(user);
+      } else if (onGoogle && user.index === currentAccount) {
         const check = document.createElement("img");
         check.src = "images/checked.svg";
         check.className = "qs-check";
         row.appendChild(check);
-      } else {
+      } else if (onGoogle) {
         row.onclick = () => {
           redirectCurrentTab(user.index);
           window.close();
         };
+      } else {
+        row.classList.add("qs-row--readonly");
       }
 
       body.appendChild(row);
     }
   });
 }
+
+document.getElementById("refresh-accounts-btn")?.addEventListener("click", () => {
+  fetchAndStoreAccounts();
+});
 
 // ─── Rules summary (read-only, main view) ─────────────────────────────────────
 
@@ -200,7 +430,15 @@ function renderRulesSummary() {
   const resolved = resolveRules(profile, App.defaultProfile);
 
   if (resolved.length === 0) {
-    container.innerHTML = '<div class="qs-empty">No rules configured.</div>';
+    const empty = document.createElement("div");
+    empty.className = "qs-empty qs-empty--import";
+    empty.innerHTML =
+      "No rules yet. Import a JSON backup or add rules manually.<br><br>" +
+      "<button type=\"button\" class=\"settings-btn settings-btn--inline\" id=\"import-from-empty-btn\">Import JSON backup</button> " +
+      "or <b>Edit</b> to add rules.";
+    container.appendChild(empty);
+    const btn = document.getElementById("import-from-empty-btn");
+    if (btn) btn.onclick = () => openSettings("data");
     return;
   }
 
@@ -524,7 +762,7 @@ function initImportExport() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "default-account-profiles.json";
+      a.download = "bedag-settings.json";
       a.click();
       URL.revokeObjectURL(url);
       showStatus("Exported successfully!", "success");

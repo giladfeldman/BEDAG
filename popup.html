@@ -6,10 +6,11 @@
 </head>
 <body class="body">
 
-  <a href="https://default.wtf/" target="_blank" class="link">
+  <a href="https://github.com/giladfeldman/BEDAG" target="_blank" class="link" rel="noopener">
     <header>
-      <img src="images/logo.svg" alt="Default Account for Google products" />
-      Default Account for Google&#8482; products
+      <img src="images/logo.svg" alt="BEDAG" />
+      BEDAG
+      <span class="header-sub">Better Default Account Google</span>
     </header>
   </a>
 
@@ -17,6 +18,11 @@
   <div id="profile-bar">
     <div id="profile-chips"></div>
     <button id="settings-btn" title="Settings">&#9881;</button>
+  </div>
+
+  <!-- Migration / conflict hints -->
+  <div id="migration-banner" class="redirect-banner migration-banner hidden">
+    <span id="migration-banner-text"></span>
   </div>
 
   <!-- Redirect confirmation banner -->
@@ -55,7 +61,8 @@
     <!-- Quick-switch -->
     <div class="section">
       <div class="section-header">
-        <span class="section-title">Switch this tab</span>
+        <span class="section-title">Google accounts</span>
+        <button id="refresh-accounts-btn" class="section-action" type="button" title="Refresh account list from Google">Refresh</button>
       </div>
       <div id="quick-switch-body"></div>
     </div>
@@ -75,7 +82,7 @@
 
   <div class="footer">
     Switch accounts: <b>Alt+1&ndash;9</b> &nbsp;&middot;&nbsp;
-    Edit at <b>chrome://extensions/shortcuts</b>
+    Shortcuts: <b>about:addons</b> &rarr; this extension &rarr; Manage
   </div>
 
   <!-- Settings overlay (full popup) -->
@@ -178,18 +185,22 @@
   <!-- Import/Export page -->
   <template id="tpl-data">
     <div class="settings-page">
-      <p class="settings-desc">Export all profiles and rules as JSON, or restore from a backup.</p>
+      <p class="settings-desc">Export all profiles and rules as JSON, or restore from a backup. Import also accepts legacy v1.14 files with <code>rules</code> and <code>defaultAccount</code> only.</p>
       <div class="settings-buttons">
         <button id="export-btn" class="settings-btn">Export</button>
         <button id="import-btn" class="settings-btn">Import</button>
         <input type="file" id="import-file" accept=".json" style="display:none" />
       </div>
+      <p class="settings-desc settings-desc--hint">
+        Migrating from the official AMO add-on? See <code>docs/MIGRATION.md</code>.
+      </p>
       <div id="settings-status" class="settings-status"></div>
       <div class="section-divider"></div>
       <p class="settings-desc">
-        Version 3.0 &mdash; Forked and improved from
-        <a href="https://default.wtf/" target="_blank">Uptech</a>.
-        BSD 3-Clause License.
+        BEDAG v1.0.0 &mdash;
+        <a href="https://github.com/giladfeldman/BEDAG" target="_blank" rel="noopener">GitHub</a>
+        &middot; Fork of <a href="https://github.com/uptechteam/default.wtf" target="_blank" rel="noopener">default.wtf</a>
+        (BSD 3-Clause)
       </p>
     </div>
   </template>

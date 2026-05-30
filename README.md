@@ -1,93 +1,107 @@
-# Default Account for Google™ products (fork)
+# BEDAG — Better Default Account Google
 
-⚠️ **Disclaimer:** This is a **working prototype** — completely vibe-coded with a focus on functionality over production polish. It works well for daily use, but security hardening and code cleanup are always welcome. If you spot any security issues, improvement suggestions, or bugs, please report them!
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE)
 
-A browser extension that automatically redirects Google and YouTube pages to your chosen account — no more landing on the wrong one.
+**BEDAG** is a Firefox extension that opens Google services (Gmail, Maps, Drive, Meet, Calendar, Scholar, Sheets, YouTube, and dozens more) with the Google account **you** choose — via per-service rules, named profiles, and one-click account switching.
 
-Based on the original [DefaultWTF](https://www.default.wtf/) extension by [Uptech](https://github.com/uptechteam/default-google-account), extended with profiles, YouTube support, custom URL rules, and a full Manifest V3 rewrite.
+Repository: [github.com/giladfeldman/BEDAG](https://github.com/giladfeldman/BEDAG)
+
+> BEDAG is a community fork. It is **not** the official [Default Google Account](https://addons.mozilla.org/en-US/firefox/addon/default-google-account/) add-on on Mozilla Add-ons. You can install both, but **enable only one** at a time (both redirect Google URLs).
+
+## Why BEDAG exists
+
+If you use multiple Google accounts, the wrong inbox or Maps profile opens by default. BEDAG adds `?authuser=N` (or equivalent) **before** the page loads, using rules you control.
+
+BEDAG builds on [default.wtf](https://www.default.wtf/) / [uptechteam/default.wtf](https://github.com/uptechteam/default.wtf) and [diegomarzaa/default.wtf](https://github.com/diegomarzaa/default.wtf), with Firefox-specific fixes (Maps redirects, account detection, profiles, import/export). See [docs/ATTRIBUTION.md](docs/ATTRIBUTION.md) and [NOTICE.md](NOTICE.md).
 
 ## Features
 
-### Quick-switch
-Open the popup and instantly switch the current tab to any of your Google accounts. One click, no settings changed — just a quick account hop for the tab you're on.
+| Feature | Description |
+|---------|-------------|
+| **Per-service rules** | e.g. Gmail → work account, Maps → personal |
+| **Profiles** | Separate rule sets (Default, Work, …) with inheritance |
+| **Quick switch** | Switch the active tab’s account from the toolbar popup |
+| **Account refresh** | Detects signed-in accounts from Google (Refresh in popup) |
+| **Import / export** | JSON backup; supports legacy v1.14 `{ rules, defaultAccount }` |
+| **55+ services** | Updated URLs (`google.com/maps`, Looker Studio, AI Studio, …) |
+| **Shortcuts** | Alt+1–9 (configure under `about:addons` → Manage → Shortcuts) |
 
-### Profiles
-Create named profiles (e.g. "University", "Personal", "Work") each with their own default account and per-service rules. Switch profiles with one click from the profile bar.
+## Install (Firefox, unsigned / developer)
 
-- **Inheritance** — non-Default profiles inherit all rules from the Default profile. Only configure what differs.
-- **Override** — click "Override" on any inherited rule to set a different account just for that profile.
-- **Duplicate** — clone a profile to use as a starting point.
-- **Color labels** — each profile gets a color so you always know which one is active.
-- **Default account per profile** — each profile has its own fallback account, configured in the profile edit form.
+Mozilla Add-ons listing may come later. For now, sideload from source:
 
-### Service rules
-Set a specific account for any Google service. Rules in a profile take precedence over the Default profile's rules.
+1. Clone this repo:
+   ```bash
+   git clone https://github.com/giladfeldman/BEDAG.git
+   cd BEDAG
+   ```
+2. Open `about:debugging#/runtime/this-firefox`.
+3. Click **Load Temporary Add-on…** and select **`manifest.json`** in the repo root.
+4. Pin **BEDAG** on the toolbar.
+5. **Disable** the official **Default Google Account** add-on in `about:addons` if present (avoid double redirects).
+6. Open [google.com](https://www.google.com) while signed in → open BEDAG popup → **Refresh** under Google accounts.
+7. Add rules (**Edit** or **Import JSON**) — see [docs/MIGRATION.md](docs/MIGRATION.md) if moving from the official add-on.
 
-- 55+ supported services including YouTube, Gmail, Drive, Calendar, Meet, Gemini, Classroom, and more.
-- Search/filter the service list.
-- Custom URL rules — match any URL pattern (e.g. `myapp.example.com`) to a specific account.
+After a Firefox restart, load the temporary add-on again (`about:debugging`). Your rules persist in extension storage once saved or imported.
 
-### Profile switch redirect
-Choose what happens to open Google tabs when you switch profiles:
-- **Ask** (default) — a banner asks whether to redirect open tabs. Includes "Always" and "Never" shortcuts to save your preference inline.
-- **Always** — silently redirect all open Google tabs.
-- **Never** — switch profile without touching open tabs.
+Optional packaged zip (local backup only):
 
-### Import / Export
-Save all profiles and rules to a JSON file. Restore them on another browser or after reinstalling.
+```powershell
+.\scripts\package-firefox.ps1
+```
 
-### Keyboard shortcuts
-`Alt+1` through `Alt+4` switch your active Google account on the current tab. Configurable at `chrome://extensions/shortcuts`.
+Output: `dist/bedag-firefox.zip` (still loaded via **Load Temporary Add-on** unless you sign it for distribution).
 
-## Installation
+## Quick start
 
-### Chrome / Brave (unpacked, development mode)
+1. **Refresh** accounts (with a Google tab open and signed in).
+2. **Settings → Rules** — add rules (service → account).
+3. Open a service in a **new tab** (e.g. `https://www.google.com/maps`) — URL should get `?authuser=N` for the rule’s account.
+4. **Settings → Import / Export → Export** — keep a JSON backup.
 
-1. **Clone or download** this repository to your computer.
+## Migrate from the official add-on
 
-2. **Open the extensions page** in your browser:
-   - **Chrome**: `chrome://extensions`
-   - **Brave**: `brave://extensions`
+The official extension cannot export settings, and it uses a **different extension ID**, so BEDAG cannot read its storage automatically.
 
-3. **Enable Developer mode** — toggle the switch in the top-right corner.
+Follow [docs/MIGRATION.md](docs/MIGRATION.md): note your rules, import JSON, or use the one-time storage copy steps.
 
-4. **Click "Load unpacked"** and select the folder you cloned/downloaded.
+## Extension ID
 
-5. The extension will appear in your extensions list. You may pin it to the toolbar for easy access (click the pin icon next to the extension name).
+| Extension | Firefox ID |
+|-----------|------------|
+| **BEDAG** (this project) | `bedag@giladfeldman.github` |
+| Official AMO add-on | `roman.furman@uptech.team` |
 
-### Firefox (unpacked, temporary)
+If you previously used a private beta build with another ID, export rules from that build (or note them manually), then import into BEDAG after loading this manifest.
 
-Firefox doesn't support permanent unpacked extensions, but you can load them temporarily for development:
+## Project layout
 
-1. Open `about:debugging#/runtime/this-firefox` in the address bar.
+| Path | Purpose |
+|------|---------|
+| `manifest.json` | Firefox MV2 manifest (load this) |
+| `manifest.chrome.json` | Chrome MV3 reference — not used on Firefox |
+| `utils.js` | URL matching, services catalogue, storage, account parsing |
+| `service-worker.js` | Background redirects, messages, account fetch |
+| `app.js` | Popup shell, quick switch, settings |
+| `rules.js` / `profiles.js` | Rules and profile editors |
+| `popup.html` / `styles.css` | UI |
+| `images/` | Icons and service logos |
+| `docs/` | Migration, testing, attribution |
+| `examples/` | Sample legacy import JSON |
+| `scripts/` | Package script and dev tests |
 
-2. Click **"Load Temporary Add-on..."** and select the `manifest.json` file from this folder.
+## Development
 
-3. The extension will be active while your browser is open. It will be unloaded when you close the browser.
+- Manual checklist: [docs/TESTING.md](docs/TESTING.md)
+- Release history: [CHANGELOG.md](CHANGELOG.md)
+- Contributor notes: [CONTRIBUTING.md](CONTRIBUTING.md)
 
-**Note:** For permanent Firefox installation, you'd need to package and sign the extension, which is beyond the scope of this guide. Consider using Chrome/Brave for now.
-
-## File overview
-
-| File | Purpose |
-|---|---|
-| `manifest.json` | Extension manifest (Manifest V3) |
-| `service-worker.js` | Background service worker — navigation interception, profile state, messaging |
-| `utils.js` | Shared utilities — URL matching, redirect logic, service catalogue, profile helpers, storage |
-| `app.js` | Popup orchestrator — global state, quick-switch, profile bar, account fetching, settings, import/export |
-| `rules.js` | Rules editor UI |
-| `profiles.js` | Profile management UI |
-| `popup.html` | Extension popup |
-| `styles.css` | All styles, including dark mode |
-
-## Contributing
-
-This is a working prototype, not production-ready code. If you find:
-- **Security issues** — please report them responsibly
-- **Bugs** — feel free to open an issue or submit a fix
-- **Improvements** — suggestions welcome (especially code cleanup, security hardening, or performance optimizations)
+Reload after code changes: `about:debugging` → **Reload** (prefer **Reload** over **Remove** so storage is kept).
 
 ## License
 
-BSD 3-Clause — see [LICENSE](LICENSE).
-Original extension © Uptech.
+BSD 3-Clause — see [LICENSE](LICENSE). You must retain copyright notices from upstream projects ([NOTICE.md](NOTICE.md)).
+
+## Disclaimer
+
+BEDAG is provided as-is. Not affiliated with Google, Mozilla, or Uptech/default.wtf maintainers. Use at your own risk; review permissions (`storage`, `tabs`, `webRequest`, `<all_urls>`) before installing.

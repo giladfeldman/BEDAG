@@ -1,11 +1,10 @@
-importScripts("utils.js");
-
-// ─── In-memory state ─────────────────────────────────────────────────────────
+// utils.js is loaded first via manifest background.scripts — do not importScripts again.// ─── In-memory state ─────────────────────────────────────────────────────────
 
 let _profiles = [];
 let _activeProfileId = DEFAULT_PROFILE_ID;
 let _accounts = [];
 let _settings = { ...DEFAULT_SETTINGS };
+let _interceptorsRegistered = false;
 
 function activeProfile() {
   return getActiveProfile(_profiles, _activeProfileId);
@@ -18,7 +17,12 @@ function loadState(cb) {
   loadProfiles((data) => {
     _profiles = data.profiles;
     _activeProfileId = data.activeProfileId;
-    _accounts = data.accounts;
+    _accounts = data.accounts ?? [];
+    if (rebindRuleAccountIds(_profiles, _accounts)) {
+      saveProfiles(_profiles, () => {});
+    } else if (normalizeProfileServiceUrls(_profiles)) {
+      saveProfiles(_profiles, () => {});
+    }
     loadSettings((s) => {
       _settings = s;
       if (cb) cb();
@@ -26,66 +30,150 @@ function loadState(cb) {
   });
 }
 
-loadState();
-
-chrome.storage.onChanged.addListener(() => loadState());
-
-// ─── Install ─────────────────────────────────────────────────────────────────
-
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason !== "install") return;
-  SyncStorage.get(["profiles", "activeProfileId"], (data) => {
-    const toStore = {};
-    if (!data.profiles) {
-      toStore.profiles = [makeDefaultProfile()];
+function storeAccountsAndRebind(accounts, callback) {
+  SyncStorage.get("profiles", (data) => {
+    const profiles = data.profiles ?? _profiles;
+    if (rebindRuleAccountIds(profiles, accounts)) {
+      SyncStorage.store({ accounts, profiles }, callback);
+    } else {
+      SyncStorage.store({ accounts }, callback);
     }
-    if (!data.activeProfileId) {
-      toStore.activeProfileId = DEFAULT_PROFILE_ID;
+    _accounts = accounts;
+  });
+}
+
+function pickGoogleTabId(callback) {
+  chrome.tabs.query({ active: true, currentWindow: true }, (activeTabs) => {
+    const active = activeTabs?.[0];
+    if (active?.id && active.url && isAnyGoogleUrl(active.url)) {
+      callback(active.id, false);
+      return;
     }
-    if (Object.keys(toStore).length) SyncStorage.store(toStore);
+    chrome.tabs.query({ url: ["*://*.google.com/*"] }, (tabs) => {
+      if (tabs?.length) {
+        callback(tabs[0].id, false);
+        return;
+      }
+      chrome.tabs.create({ url: "https://www.google.com/", active: false }, (tab) => {
+        if (!tab?.id) {
+          callback(null, false);
+          return;
+        }
+        const onUpdated = (tabId, info) => {
+          if (tabId !== tab.id || info.status !== "complete") return;
+          chrome.tabs.onUpdated.removeListener(onUpdated);
+          callback(tab.id, true);
+        };
+        chrome.tabs.onUpdated.addListener(onUpdated);
+      });
+    });
+  });
+}
+
+function runListAccountsOnTab(tabId, createdTab, done) {
+  chrome.tabs.executeScript(
+    tabId,
+    { code: buildListAccountsInjectCode() },
+    (results) => {
+      if (createdTab) chrome.tabs.remove(tabId);
+
+      if (chrome.runtime.lastError) {
+        done(null, chrome.runtime.lastError.message);
+        return;
+      }
+
+      const accounts = accountsFromListAccountsText(results?.[0]);
+      if (!accounts.length) {
+        done(
+          null,
+          "No signed-in Google accounts returned. Open google.com while signed in, then click Refresh."
+        );
+        return;
+      }
+      done(accounts, null);
+    }
+  );
+}
+
+function fetchListAccountsViaGoogleTab(done) {
+  pickGoogleTabId((tabId, createdTab) => {
+    if (!tabId) {
+      done(null, "No Google tab available to read signed-in accounts.");
+      return;
+    }
+    runListAccountsOnTab(tabId, createdTab, done);
+  });
+}
+
+function fetchListAccountsFromBackground(done) {
+  const url = LIST_ACCOUNTS_URLS[0];
+  fetch(url)
+    .then((r) => r.text())
+    .then((rawText) => {
+      const accounts = accountsFromListAccountsText(rawText);
+      if (accounts.length) done(accounts, null);
+      else done(null, "background-empty");
+    })
+    .catch(() => done(null, "background-fetch-failed"));
+}
+
+function fetchGoogleAccountsComplete(done) {
+  fetchListAccountsViaGoogleTab((accounts, err) => {
+    if (accounts?.length) {
+      done(accounts, null);
+      return;
+    }
+    fetchListAccountsFromBackground((bgAccounts, bgErr) => {
+      if (bgAccounts?.length) {
+        done(bgAccounts, null);
+        return;
+      }
+      done(null, err || bgErr || "Could not load Google accounts.");
+    });
+  });
+}
+
+function fetchGoogleAccountsInBackground() {
+  fetchGoogleAccountsComplete((accounts, err) => {
+    if (!accounts?.length) return;
+    storeAccountsAndRebind(accounts);
+  });
+}
+
+migrateLegacyStorageIfNeeded(() => {
+  loadState(() => {
+    fetchGoogleAccountsInBackground();
+    registerInterceptors();
   });
 });
 
-// ─── Migrate legacy data (rules / defaultAccount at root) ────────────────────
+chrome.storage.onChanged.addListener(() => {
+  loadState();
+});
 
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason !== "update") return;
-  SyncStorage.get(["rules", "defaultAccount", "customServices", "profiles"], (data) => {
-    if (data.profiles) return; // already migrated
-    const legacy = makeDefaultProfile();
-    if (Array.isArray(data.rules)) legacy.rules = data.rules;
-    if (typeof data.defaultAccount === "number") legacy.defaultAccount = data.defaultAccount;
-    if (Array.isArray(data.customServices)) legacy.customServices = data.customServices;
-    SyncStorage.store({ profiles: [legacy], activeProfileId: DEFAULT_PROFILE_ID });
+chrome.runtime.onInstalled.addListener(() => {
+  migrateLegacyStorageIfNeeded(() => {
+    loadState(() => {
+      fetchGoogleAccountsInBackground();
+      registerInterceptors();
+    });
   });
 });
 
 // ─── Message handlers ─────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-
-  // Fetch Google accounts
   if (message === "fetch_google_accounts") {
-    const url = "https://accounts.google.com/ListAccounts?gpsia=1&source=ogb&mo=1&origin=https://accounts.google.com";
-    fetch(url)
-      .then(r => r.text())
-      .then((rawText) => {
-        const scriptMatch = rawText.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
-        if (!scriptMatch) throw new Error("no script");
-        const dataStr = scriptMatch[1].split("'")[1];
-        if (!dataStr) throw new Error("no data");
-        return dataStr
-          .replace(/\\x([0-9a-fA-F]{2})/g, (_, p) => String.fromCharCode(parseInt(p, 16)))
-          .replace(/\\\//g, "/")
-          .replace(/\\n/g, "");
-      })
-      .then(t => JSON.parse(t))
-      .then(sendResponse)
-      .catch(() => sendResponse(null));
+    fetchGoogleAccountsComplete((accounts, err) => {
+      if (accounts?.length) {
+        storeAccountsAndRebind(accounts, () => sendResponse({ accounts }));
+      } else {
+        sendResponse({ accounts: [], error: err });
+      }
+    });
     return true;
   }
 
-  // Switch active profile
   if (message?.type === "set_active_profile") {
     const { profileId, redirectTabs, tabIds } = message;
     SyncStorage.store({ activeProfileId: profileId }, () => {
@@ -102,16 +190,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // Get all open Google tab URLs (so popup can ask user)
   if (message === "get_google_tabs") {
     chrome.tabs.query({}, (tabs) => {
-      const googleTabs = tabs.filter(t => t.url && isGoogleServiceUrl(t.url));
-      sendResponse(googleTabs.map(t => ({ id: t.id, url: t.url, title: t.title })));
+      const googleTabs = tabs.filter((t) => t.url && isGoogleServiceUrl(t.url));
+      sendResponse(
+        googleTabs.map((t) => ({ id: t.id, url: t.url, title: t.title }))
+      );
     });
     return true;
   }
 
-  // Export
   if (message === "export_settings") {
     SyncStorage.get(["profiles", "activeProfileId"], (data) => {
       sendResponse({
@@ -124,7 +212,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // Save behaviour settings
   if (message?.type === "save_settings") {
     saveSettings(message.data, () => {
       _settings = { ...DEFAULT_SETTINGS, ...message.data };
@@ -133,17 +220,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // Import
-  if (message?.type === "import_settings") {
-    const s = message.data;
-    if (!s || !Array.isArray(s.profiles)) {
-      sendResponse({ success: false, error: "Invalid settings file" });
+  if (message === "try_migrate_legacy") {
+    migrateLegacyStorageIfNeeded((result) => {
+      if (result?.migrated) loadState();
+      sendResponse(result ?? { migrated: false, ruleCount: 0 });
+    });
+    return true;
+  }
+
+  if (message === "get_storage_diagnostics") {
+    SyncStorage.get(
+      ["rules", "defaultAccount", "customServices", "profiles", "activeProfileId", "accounts"],
+      (data) => {
+        sendResponse(getStorageDiagnostics(data));
+      }
+    );
+    return true;
+  }
+
+  if (message === "check_extension_conflicts") {
+    if (!chrome.management?.getAll) {
+      sendResponse({ officialEnabled: false });
       return true;
     }
-    SyncStorage.store({
-      profiles: s.profiles,
-      activeProfileId: s.activeProfileId ?? DEFAULT_PROFILE_ID,
-    }, () => sendResponse({ success: true }));
+    chrome.management.getAll((exts) => {
+      const official = exts.find(
+        (e) => e.enabled && isOfficialDefaultGoogleAccountExtension(e, chrome.runtime.id)
+      );
+      sendResponse({
+        officialEnabled: Boolean(official),
+        officialName: official?.name ?? null,
+      });
+    });
+    return true;
+  }
+
+  if (message?.type === "import_settings") {
+    const normalized = normalizeImportPayload(message.data);
+    if (normalized.error) {
+      sendResponse({ success: false, error: normalized.error });
+      return true;
+    }
+    SyncStorage.store(
+      {
+        profiles: normalized.profiles,
+        activeProfileId: normalized.activeProfileId,
+      },
+      () => sendResponse({ success: true })
+    );
     return true;
   }
 });
@@ -151,139 +275,134 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ─── Redirect tabs to active profile ──────────────────────────────────────────
 
 function redirectAllGoogleTabs() {
-  const prof = activeProfile();
-  const defProf = defaultProfile();
-  const resolvedRules = resolveRules(prof, defProf);
-
   chrome.tabs.query({}, (tabs) => {
     for (const tab of tabs) {
-      if (!tab.url || !isGoogleServiceUrl(tab.url)) continue;
-      const accountId = getAccountForUrl(tab.url, resolvedRules, prof.defaultAccount);
-      const redirectUrl = convertToRedirectUrl(tab.url, accountId);
-      if (redirectUrl && isAccountLoggedIn(accountId)) {
-        chrome.tabs.update(tab.id, { url: redirectUrl });
-      }
+      applyRedirectToTab(tab.id, tab.url);
     }
   });
 }
 
 function redirectSpecificTabs(tabIds) {
   if (!tabIds || tabIds.length === 0) return;
-  const prof = activeProfile();
-  const defProf = defaultProfile();
-  const resolvedRules = resolveRules(prof, defProf);
   const tabIdSet = new Set(tabIds);
-
   chrome.tabs.query({}, (tabs) => {
     for (const tab of tabs) {
       if (!tabIdSet.has(tab.id)) continue;
-      if (!tab.url || !isGoogleServiceUrl(tab.url)) continue;
-      const accountId = getAccountForUrl(tab.url, resolvedRules, prof.defaultAccount);
-      const redirectUrl = convertToRedirectUrl(tab.url, accountId);
-      if (redirectUrl && isAccountLoggedIn(accountId)) {
-        chrome.tabs.update(tab.id, { url: redirectUrl });
-      }
+      applyRedirectToTab(tab.id, tab.url);
     }
   });
 }
 
-// ─── Navigation interception ──────────────────────────────────────────────────
-
-let last4Redirects = [];
-
-function detectCycle(url) {
-  const now = Date.now();
-  last4Redirects = last4Redirects.filter(r => now - r.time < 250);
-  if (last4Redirects.filter(r => r.url === url).length >= 3) return true;
-  last4Redirects.push({ time: now, url });
-  return false;
-}
-
-function handleNavigation(tabId, url) {
-  if (!isGoogleServiceUrl(url) && !isCustomServiceUrl(url)) return;
-
-  if (_settings.enforceOnPrecachedUrls) {
-    // Strip /u/N path segments and authuser params so we re-evaluate from scratch
-    try {
-      const u = new URL(url);
-      u.pathname = u.pathname.replace(/\/u\/\d+\/?/i, "/");
-      u.searchParams.delete("authuser");
-      url = u.toString();
-    } catch {}
-  } else {
-    if (/authuser/i.test(url)) return;
-    if (/\/u\/\d+/i.test(url)) return;
-  }
-
-  if (url.includes("docs.google") && url.includes("/create")) return;
-
-  const prof = activeProfile();
-  const defProf = defaultProfile();
-  const resolvedRules = resolveRules(prof, defProf);
-  const accountId = getAccountForUrl(url, resolvedRules, prof.defaultAccount);
-  const redirectUrl = convertToRedirectUrl(url, accountId);
-
-  if (redirectUrl && isAccountLoggedIn(accountId)) {
-    if (detectCycle(redirectUrl)) return;
-    chrome.tabs.update(tabId, { url: redirectUrl });
+function applyRedirectToTab(tabId, url) {
+  if (!url) return;
+  const result = resolveRedirectForUrl(
+    url,
+    _settings,
+    _profiles,
+    _activeProfileId,
+    _accounts
+  );
+  if (result?.redirectUrl) {
+    chrome.tabs.update(tabId, { url: result.redirectUrl });
   }
 }
 
-chrome.webNavigation.onBeforeNavigate.addListener((details) => {
-  if (details.frameId !== 0) return;
-  handleNavigation(details.tabId, details.url);
-});
+// ─── Request interception (primary — same approach as original extension) ─────
 
-// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+let last4RedirectUrls = [];
+const maxRedirectTimeMS = 250;
 
-chrome.commands.onCommand.addListener((command) => {
-  if (!command?.startsWith("switch_to_ga_")) return;
-  const accNum = parseInt(command.slice(-1)) - 1;
-  if (isNaN(accNum)) return;
-  if (_accounts.length > accNum) redirectCurrentTab(accNum);
-});
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function isAccountLoggedIn(accountIndex) {
-  if (accountIndex === 0) return true;
-  return Boolean(_accounts[accountIndex]?.isLoggedIn);
+function detectRedirectCycle(redirectUrl) {
+  const currentTime = Date.now();
+  if (last4RedirectUrls.length === 0) {
+    last4RedirectUrls.push({ time: currentTime, redirectUrl });
+    return false;
+  }
+  const lastRedirect = last4RedirectUrls[last4RedirectUrls.length - 1];
+  if (currentTime - lastRedirect.time > maxRedirectTimeMS) {
+    last4RedirectUrls = [];
+  }
+  if (lastRedirect.redirectUrl === redirectUrl) {
+    last4RedirectUrls.push({ time: currentTime, redirectUrl });
+  }
+  return last4RedirectUrls.length >= 4;
 }
 
 function isCustomServiceUrl(url) {
   const prof = activeProfile();
   const defProf = defaultProfile();
   const allCustom = [
-    ...(prof.customServices ?? []),
-    ...((prof.id !== DEFAULT_PROFILE_ID ? defProf?.customServices : null) ?? []),
+    ...(prof?.customServices ?? []),
+    ...((prof?.id !== DEFAULT_PROFILE_ID ? defProf?.customServices : null) ?? []),
   ];
-  return allCustom.some(cs => { try { return new RegExp(cs.pattern, "i").test(url); } catch { return false; } });
+  return allCustom.some((cs) => {
+    try {
+      return new RegExp(cs.pattern, "i").test(url);
+    } catch {
+      return false;
+    }
+  });
 }
 
-function getAccountForUrl(url, rules, fallbackAccount) {
-  for (const rule of rules) {
-    if (rule.isCustom && rule.pattern) {
-      try { if (new RegExp(rule.pattern, "i").test(url)) return rule.accountId; } catch {}
-      continue;
-    }
-    const name = rule.serviceName?.toLowerCase();
-    if (!name) continue;
+function shouldInterceptUrl(url) {
+  return isGoogleServiceUrl(url) || isCustomServiceUrl(url);
+}
 
-    if (name === "youtube") {
-      if (/^https?:\/\/(www\.)?youtube\.com/i.test(url) || /^https?:\/\/(www\.)?youtu\.be/i.test(url)) return rule.accountId;
-      continue;
-    }
-    if (name === "blogger") {
-      if (/^https?:\/\/(www\.)?blogger\.com/i.test(url) || /^https?:\/\/.*\.blogspot\.com/i.test(url)) return rule.accountId;
-      continue;
-    }
-    if (name === "search") {
-      if (/^https?:\/\/(www\.)?google\.co(m|\.[a-z]{2,3})\/?(\?|$|#|\/search|\/webhp)/i.test(url)) return rule.accountId;
-      continue;
-    }
+function registerInterceptors() {
+  if (_interceptorsRegistered) return;
+  _interceptorsRegistered = true;
 
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    if (new RegExp(`^https?:\\/\\/[^?&]*${escaped}\\.google\\.co.*`, "is").test(url)) return rule.accountId;
+chrome.webRequest.onBeforeRequest.addListener(
+  (details) => {
+    if (details.method !== "GET") return;
+    if (!shouldInterceptUrl(details.url)) return;
+
+    const result = resolveRedirectForUrl(
+      details.url,
+      _settings,
+      _profiles,
+      _activeProfileId,
+      _accounts
+    );
+    if (!result?.redirectUrl) return;
+
+    if (detectRedirectCycle(result.redirectUrl)) return;
+
+    return { redirectUrl: result.redirectUrl };
+  },
+  { types: ["main_frame"], urls: ["<all_urls>"] },
+  ["blocking"]
+);
+
+chrome.tabs.onCreated.addListener((tab) => {
+  const url = tab.pendingUrl || tab.url;
+  if (!url || !shouldInterceptUrl(url)) return;
+
+  const result = resolveRedirectForUrl(
+    url,
+    _settings,
+    _profiles,
+    _activeProfileId,
+    _accounts
+  );
+  if (!result?.redirectUrl) return;
+
+  chrome.tabs.update(tab.id, { url: result.redirectUrl });
+});
+
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId !== 0) return;
+  applyRedirectToTab(details.tabId, details.url);
+});
+}
+
+// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+
+chrome.commands.onCommand.addListener((command) => {
+  if (!command?.startsWith("switch_to_ga_")) return;
+  const accNum = parseInt(command.slice(-1), 10) - 1;
+  if (isNaN(accNum)) return;
+  if (getAccountByIndex(_accounts, accNum)) {
+    redirectCurrentTab(accNum);
   }
-  return fallbackAccount;
-}
+});

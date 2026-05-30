@@ -1,0 +1,29 @@
+{
+  "defaultAccount": 0,
+  "rules": [
+    {
+      "serviceName": "Mail",
+      "serviceTitle": "Gmail",
+      "serviceUrl": "mail.google.com",
+      "serviceImg": "./images/logos/mail.png",
+      "accountEmail": "personal@example.com",
+      "accountId": 0
+    },
+    {
+      "serviceName": "Meet",
+      "serviceTitle": "Meet",
+      "serviceUrl": "meet.google.com",
+      "serviceImg": "./images/logos/meet.png",
+      "accountEmail": "work@example.com",
+      "accountId": 1
+    },
+    {
+      "serviceName": "Scholar",
+      "serviceTitle": "Scholar",
+      "serviceUrl": "scholar.google.com",
+      "serviceImg": "./images/logos/google.png",
+      "accountEmail": "work@example.com",
+      "accountId": 1
+    }
+  ]
+}

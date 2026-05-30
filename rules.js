@@ -150,8 +150,8 @@ function openOverrideDialog(inheritedRule) {
 function renderAddServiceRule() {
   const profile     = App.viewedProfile;
   const allServices = allSupportedGoogleServices();
-  const usedUrls    = new Set((profile?.rules ?? []).filter(r => !r.isCustom).map(r => r.serviceUrl));
-  const available   = allServices.filter(s => !usedUrls.has(s.url))
+  const usedNames   = new Set((profile?.rules ?? []).filter(r => !r.isCustom).map(r => (r.serviceName || "").toLowerCase()));
+  const available   = allServices.filter(s => !usedNames.has(s.name.toLowerCase()))
                                   .sort((a, b) => a.title.localeCompare(b.title));
   const accounts    = App.accounts;
 
@@ -294,7 +294,11 @@ function addRuleToProfile(rule) {
   const profile = App.viewedProfile;
   if (!profile) return;
   profile.rules = profile.rules ?? [];
-  const idx = profile.rules.findIndex(r => r.serviceUrl === rule.serviceUrl && Boolean(r.isCustom) === Boolean(rule.isCustom));
+  const idx = profile.rules.findIndex((r) => {
+    if (Boolean(r.isCustom) !== Boolean(rule.isCustom)) return false;
+    if (rule.isCustom) return r.serviceUrl === rule.serviceUrl;
+    return (r.serviceName || "").toLowerCase() === (rule.serviceName || "").toLowerCase();
+  });
   if (idx >= 0) profile.rules[idx] = rule;
   else profile.rules.push(rule);
 
@@ -307,9 +311,9 @@ function addRuleToProfile(rule) {
 function deleteRule(rule) {
   const profile = App.viewedProfile;
   if (!profile) return;
-  profile.rules = (profile.rules ?? []).filter(r => {
+  profile.rules = (profile.rules ?? []).filter((r) => {
     if (rule.isCustom) return !(r.isCustom && r.serviceUrl === rule.serviceUrl);
-    return r.serviceUrl !== rule.serviceUrl;
+    return (r.serviceName || "").toLowerCase() !== (rule.serviceName || "").toLowerCase();
   });
   App.saveProfiles(() => {
     renderRulesUI();
