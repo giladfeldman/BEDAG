@@ -28,7 +28,17 @@ BEDAG builds on [default.wtf](https://www.default.wtf/) / [uptechteam/default.wt
 
 ## Install (Firefox, unsigned / developer)
 
-Mozilla Add-ons listing may come later. For now, sideload from source:
+Mozilla Add-ons listing may come later. Pick one:
+
+### Option A — Download `.xpi` (easiest to share)
+
+1. Get **`bedag-<version>.xpi`** from [GitHub Releases](https://github.com/giladfeldman/BEDAG/releases).
+2. Open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → select the `.xpi`.
+3. Follow steps 4–7 below.
+
+Full steps and troubleshooting: [docs/INSTALL-XPI.md](docs/INSTALL-XPI.md).
+
+### Option B — Clone and load source
 
 1. Clone this repo:
    ```bash
@@ -42,15 +52,15 @@ Mozilla Add-ons listing may come later. For now, sideload from source:
 6. Open [google.com](https://www.google.com) while signed in → open BEDAG popup → **Refresh** under Google accounts.
 7. Add rules (**Edit** or **Import JSON**) — see [docs/MIGRATION.md](docs/MIGRATION.md) if moving from the official add-on.
 
-After a Firefox restart, load the temporary add-on again (`about:debugging`). Your rules persist in extension storage once saved or imported.
+After a Firefox restart, load the temporary add-on again (`about:debugging` or reload the same `.xpi`). Your rules persist in extension storage once saved or imported.
 
-Optional packaged zip (local backup only):
+### Build `.xpi` locally
 
 ```powershell
 .\scripts\package-firefox.ps1
 ```
 
-Output: `dist/bedag-firefox.zip` (still loaded via **Load Temporary Add-on** unless you sign it for distribution).
+Output: `dist/bedag-<version>.xpi` (+ `.sha256` checksum). Same temporary-install flow as Option A.
 
 ## Quick start
 

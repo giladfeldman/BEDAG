@@ -1,0 +1,27 @@
+name: Release XPI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build unsigned XPI
+        shell: pwsh
+        run: ./scripts/package-firefox.ps1
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.xpi
+            dist/*.sha256
+          fail_on_unmatched_files: true

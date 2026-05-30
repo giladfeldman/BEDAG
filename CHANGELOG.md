@@ -9,6 +9,14 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- Shareable unsigned Firefox package: `scripts/package-firefox.ps1` → `dist/bedag-<version>.xpi`
+- [docs/INSTALL-XPI.md](docs/INSTALL-XPI.md) — install steps for recipients
+- GitHub Actions workflow uploads `.xpi` on version tags
+
 ## [1.0.2] — 2026-05-30
 
 ### Fixed

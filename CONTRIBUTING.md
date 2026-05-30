@@ -18,7 +18,10 @@ Optional:
 ```powershell
 node scripts/test-url-match.js
 node scripts/test-list-accounts-parse.js
+.\scripts\package-firefox.ps1   # before tagging a release
 ```
+
+Release tags (`v*`) trigger CI to attach `dist/bedag-<version>.xpi` to the GitHub release.
 
 ## Pull requests
 
