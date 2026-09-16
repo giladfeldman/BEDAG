@@ -33,6 +33,10 @@ npm ci
 
 The script lints against Mozilla's validation rules first, then uploads. BEDAG is signed **unlisted** (self-distributed): Mozilla signs it, but it is not published or discoverable on addons.mozilla.org. Unlisted signing is automated and usually finishes in a couple of minutes.
 
+You get two files in `dist/`: the one Mozilla returns, named after its internal id (`4718580d…-1.0.3.xpi`), and a copy named `bedag-<version>-signed.xpi`. They are identical — the signature lives inside the archive, so renaming does not invalidate it. Install either.
+
+**A version can only be signed once.** Mozilla rejects a resubmission of a version it has already signed, so a botched release needs a version bump rather than a retry.
+
 Then, in Firefox:
 
 1. **Disable** the official **Default Account for Google™ products** add-on in `about:addons` — two redirect extensions will fight over the same URLs.

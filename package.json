@@ -1,6 +1,6 @@
 {
   "name": "bedag",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "Build and signing tooling for the BEDAG Firefox extension. Not an npm package - the extension itself has no runtime dependencies.",
   "license": "BSD-3-Clause",

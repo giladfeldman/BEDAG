@@ -4,7 +4,7 @@
   "short_name": "BEDAG",
   "description": "Open Gmail, Maps, Drive, Meet, and 50+ Google services with the account you choose. Profiles, per-service rules, import/export. Firefox extension.",
   "homepage_url": "https://github.com/giladfeldman/BEDAG",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "icons": {
     "16": "/images/16.png",
     "32": "/images/32.png",

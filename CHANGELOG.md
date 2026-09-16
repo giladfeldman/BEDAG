@@ -11,6 +11,16 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-09-16
+
+### Changed
+
+- **New icon.** The old mark — three stacked diamonds in Google's four colours — was inherited
+  from the upstream fork and was hard to tell apart from the official add-on's icon in a crowded
+  toolbar. Replaced with a two-tone indigo/amber badge carrying a white **B**: a different
+  silhouette and a different palette, so the two are distinguishable at 16 px. `images/logo.svg`
+  was redrawn to match, and the 1024 px master is kept in `assets/` (not packaged).
+
 ## [1.0.3] — 2026-09-16
 
 ### Added
@@ -131,6 +141,7 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 </details>
 
+[1.0.4]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.4
 [1.0.3]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.3
 [1.0.2]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.2
 [1.0.1]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.1

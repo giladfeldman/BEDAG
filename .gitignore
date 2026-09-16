@@ -9,6 +9,7 @@ gilad-*.json
 /web-ext-artifacts/
 *.zip
 *.xpi
+.amo-upload-uuid
 
 # Node tooling (web-ext only; the extension itself has no runtime deps)
 node_modules/
@@ -37,6 +38,9 @@ desktop.ini
 *.icloud
 * 2
 * 2.*
+
+# Local AI-assistant configuration. Kept out of the repo; not part of the extension.
+.claude/
 
 # Cursor / local agent (not part of the extension)
 .cursor/

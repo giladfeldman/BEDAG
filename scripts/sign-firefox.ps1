@@ -50,18 +50,27 @@ try {
   & npx web-ext sign --channel=unlisted --api-key="$env:AMO_JWT_ISSUER" --api-secret="$env:AMO_JWT_SECRET"
   if ($LASTEXITCODE -ne 0) { throw "web-ext sign failed (exit $LASTEXITCODE)" }
 
+  # web-ext names the signed file after AMO's internal id, e.g. 4718580d...-1.0.3.xpi.
+  # Identify it by its Mozilla signature rather than by its name, which is opaque.
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
   $signed = Get-ChildItem -Path (Join-Path $root "dist") -Filter "*.xpi" |
-            Where-Object { $_.Name -notlike "bedag-*.xpi" } |
             Sort-Object LastWriteTime -Descending |
+            Where-Object {
+              $zip = [System.IO.Compression.ZipFile]::OpenRead($_.FullName)
+              try { $zip.Entries.FullName -contains "META-INF/mozilla.rsa" } finally { $zip.Dispose() }
+            } |
             Select-Object -First 1
-  if (-not $signed) {
-    $signed = Get-ChildItem -Path (Join-Path $root "dist") -Filter "*.xpi" |
-              Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  }
+  if (-not $signed) { throw "No signed .xpi found in dist/ - web-ext reported success but produced nothing signed." }
+
+  # Keep a recognisable copy alongside it. The signature lives inside the archive,
+  # so renaming does not invalidate it.
+  $friendly = Join-Path $root "dist/bedag-$version-signed.xpi"
+  Copy-Item -Path $signed.FullName -Destination $friendly -Force
 
   Write-Host ""
   Write-Host "BEDAG $version (signed by Mozilla)"
-  Write-Host "  XPI: $($signed.FullName)"
+  Write-Host "  XPI:      $friendly"
+  Write-Host "  As built: $($signed.FullName)"
   Write-Host ""
   Write-Host "Install permanently: about:addons -> gear icon -> Install Add-on From File -> choose the .xpi"
 }
