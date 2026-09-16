@@ -3,7 +3,7 @@
 All notable changes to [BEDAG](https://github.com/giladfeldman/BEDAG) are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).  
-BedAG **1.0.0** is the first public release under the BEDAG name and repository.
+BEDAG **1.0.0** is the first public release under the BEDAG name and repository.
 
 Earlier development used internal version numbers (2.x); that history is summarized below.
 
@@ -11,11 +11,34 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-09-16
+
 ### Added
 
+- **Permanent install.** `scripts/sign-firefox.ps1` submits the build to Mozilla for unlisted
+  signing, producing an `.xpi` that installs via `about:addons` and survives a Firefox restart.
+  Release Firefox refuses to permanently install unsigned extensions, so this was previously
+  impossible — see [docs/INSTALL-XPI.md](docs/INSTALL-XPI.md).
+- **Toolbar icon.** `browser_action` now declares `default_icon`; without it the toolbar button
+  rendered blank and BEDAG was impossible to find among pinned extensions.
+- `data_collection_permissions: { required: ["none"] }` — BEDAG collects no data, and
+  addons.mozilla.org requires new submissions to say so explicitly.
+- Build tooling: `package.json` + `web-ext`, with `web-ext-config.mjs` as the single source of
+  truth for what ships inside the package. `npm run lint` validates against AMO's rules.
 - Shareable unsigned Firefox package: `scripts/package-firefox.ps1` → `dist/bedag-<version>.xpi`
 - [docs/INSTALL-XPI.md](docs/INSTALL-XPI.md) — install steps for recipients
-- GitHub Actions workflow uploads `.xpi` on version tags
+- GitHub Actions workflow lints, tests, and uploads the `.xpi` on version tags
+
+### Fixed
+
+- **Manifest load warning.** `homepage_url` was nested inside `browser_specific_settings.gecko`,
+  where it is not a valid property; Firefox reported “an unexpected property was found in the
+  WebExtension manifest” on every load. It now sits at the top level.
+- **Version shown in the popup** was hard-coded to `1.0.1` and had drifted from the manifest. It
+  now reads from `chrome.runtime.getManifest()`.
+- The delete-rule icon is cloned from a `<template>` instead of assigned through `innerHTML`,
+  clearing AMO's `UNSAFE_VAR_ASSIGNMENT` warning. Validation is now clean: 0 errors, 0 warnings.
+- Typos: “Eefault” in docs/MIGRATION.md, “BedAG” in this file.
 
 ## [1.0.2] — 2026-05-30
 
@@ -108,4 +131,7 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 </details>
 
+[1.0.3]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.3
+[1.0.2]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.2
+[1.0.1]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.1
 [1.0.0]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.0

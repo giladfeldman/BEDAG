@@ -14,6 +14,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install build tooling
+        run: npm ci
+
+      - name: Validate against AMO rules
+        run: npx web-ext lint
+
+      - name: Run tests
+        run: |
+          node scripts/test-url-match.js
+          node scripts/test-list-accounts-parse.js
+
+      # Unsigned build only. Signing needs AMO credentials and is done locally
+      # via scripts/sign-firefox.ps1 - see docs/INSTALL-XPI.md.
       - name: Build unsigned XPI
         shell: pwsh
         run: ./scripts/package-firefox.ps1

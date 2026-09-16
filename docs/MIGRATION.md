@@ -1,6 +1,6 @@
 # Migrating to BEDAG
 
-BEDAG (**B**etter **E**efault **A**ccount **G**oogle) is a **separate** Firefox extension from the official [Default Google Account](https://addons.mozilla.org/en-US/firefox/addon/default-google-account/) add-on.
+BEDAG (**B**etter **D**efault **A**ccount **G**oogle) is a **separate** Firefox extension from the official [Default Google Account](https://addons.mozilla.org/en-US/firefox/addon/default-google-account/) add-on.
 
 | | Official AMO add-on | BEDAG |
 |---|---------------------|--------|

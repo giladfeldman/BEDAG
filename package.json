@@ -1,0 +1,16 @@
+{
+  "name": "bedag",
+  "version": "1.0.3",
+  "private": true,
+  "description": "Build and signing tooling for the BEDAG Firefox extension. Not an npm package - the extension itself has no runtime dependencies.",
+  "license": "BSD-3-Clause",
+  "homepage": "https://github.com/giladfeldman/BEDAG",
+  "scripts": {
+    "build": "web-ext build --overwrite-dest",
+    "lint": "web-ext lint",
+    "sign": "web-ext sign --channel=unlisted"
+  },
+  "devDependencies": {
+    "web-ext": "^8.5.0"
+  }
+}

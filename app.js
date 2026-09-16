@@ -751,6 +751,9 @@ function saveSetting(key, value) {
 // ─── Import / Export ──────────────────────────────────────────────────────────
 
 function initImportExport() {
+  const versionEl = document.getElementById("bedag-version");
+  if (versionEl) versionEl.textContent = chrome.runtime.getManifest().version;
+
   const exportBtn = document.getElementById("export-btn");
   const importBtn = document.getElementById("import-btn");
   const importFile = document.getElementById("import-file");

@@ -6,8 +6,12 @@ gilad-*.json
 
 # Build artifacts
 /dist/
+/web-ext-artifacts/
 *.zip
 *.xpi
+
+# Node tooling (web-ext only; the extension itself has no runtime deps)
+node_modules/
 
 # Environment / secrets
 .env

@@ -74,7 +74,7 @@ function renderRulesList() {
     } else {
       const delBtn = document.createElement("button");
       delBtn.className = "rule-btn rule-btn--delete";
-      delBtn.innerHTML = deleteIcon();
+      delBtn.appendChild(deleteIcon());
       delBtn.title = "Remove rule";
       delBtn.onclick = () => deleteRule(rule);
       actions.appendChild(delBtn);
@@ -324,14 +324,10 @@ function deleteRule(rule) {
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
 function deleteIcon() {
-  return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="12" cy="12" r="12" fill="white"/>
-    <path d="M8.36477 9.11767H15.6354V15.6308C15.6354 16.8288 14.6642 17.8 13.4661 17.8H10.534C9.33597 17.8 8.36477 16.8288 8.36477 15.6308V9.11767Z" stroke="#8B8792" stroke-width="1.2"/>
-    <rect x="10.5883" y="11.3415" width="0.705882" height="3.52941" rx="0.352941" fill="#8B8792"/>
-    <rect x="12.7058" y="11.3415" width="0.705882" height="3.52941" rx="0.352941" fill="#8B8792"/>
-    <path d="M6.35291 8.97921C6.35291 8.72431 6.55954 8.51767 6.81444 8.51767H17.1855C17.4404 8.51767 17.647 8.72431 17.647 8.97921C17.647 9.23411 17.4404 9.44075 17.1855 9.44075H6.81444C6.55954 9.44075 6.35291 9.23411 6.35291 8.97921Z" fill="#8B8792"/>
-    <path d="M9.28226 8.51773V9.11773H9.88226H14.1176H14.7176V8.51773C14.7176 7.01682 13.5008 5.80009 11.9999 5.80009C10.499 5.80009 9.28226 7.01682 9.28226 8.51773Z" stroke="#8B8792" stroke-width="1.2"/>
-  </svg>`;
+  // Cloned from a <template> in popup.html rather than built from a string:
+  // assigning markup via innerHTML trips AMO's UNSAFE_VAR_ASSIGNMENT check.
+  const tpl = document.getElementById("tpl-delete-icon");
+  return tpl ? tpl.content.cloneNode(true) : document.createTextNode("\u00d7");
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

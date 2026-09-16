@@ -26,11 +26,25 @@ BEDAG builds on [default.wtf](https://www.default.wtf/) / [uptechteam/default.wt
 | **55+ services** | Updated URLs (`google.com/maps`, Looker Studio, AI Studio, …) |
 | **Shortcuts** | Alt+1–9 (configure under `about:addons` → Manage → Shortcuts) |
 
-## Install (Firefox, unsigned / developer)
+## Install (Firefox)
 
-Mozilla Add-ons listing may come later. Pick one:
+BEDAG is not published on addons.mozilla.org. Pick one:
 
-### Option A — Download `.xpi` (easiest to share)
+### Option A — Signed build (installs permanently)
+
+Release Firefox only installs extensions Mozilla has signed. Sign your own build with a free
+add-on developer account — the add-on stays unlisted and is never published:
+
+```powershell
+npm ci
+.\scripts\sign-firefox.ps1
+```
+
+Then `about:addons` → gear icon → **Install Add-on From File…** → pick the signed `.xpi` from
+`dist/`. It survives restarts. Credentials and full steps:
+[docs/INSTALL-XPI.md](docs/INSTALL-XPI.md).
+
+### Option B — Unsigned `.xpi` (reload after every restart)
 
 1. Get **`bedag-<version>.xpi`** from [GitHub Releases](https://github.com/giladfeldman/BEDAG/releases).
 2. Open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → select the `.xpi`.
@@ -38,7 +52,7 @@ Mozilla Add-ons listing may come later. Pick one:
 
 Full steps and troubleshooting: [docs/INSTALL-XPI.md](docs/INSTALL-XPI.md).
 
-### Option B — Clone and load source
+### Option C — Clone and load source
 
 1. Clone this repo:
    ```bash

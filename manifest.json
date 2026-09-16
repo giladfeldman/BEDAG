@@ -3,7 +3,8 @@
   "name": "BEDAG — Better Default Account Google",
   "short_name": "BEDAG",
   "description": "Open Gmail, Maps, Drive, Meet, and 50+ Google services with the account you choose. Profiles, per-service rules, import/export. Firefox extension.",
-  "version": "1.0.2",
+  "homepage_url": "https://github.com/giladfeldman/BEDAG",
+  "version": "1.0.3",
   "icons": {
     "16": "/images/16.png",
     "32": "/images/32.png",
@@ -11,6 +12,12 @@
     "128": "/images/128.png"
   },
   "browser_action": {
+    "default_icon": {
+      "16": "/images/16.png",
+      "32": "/images/32.png",
+      "48": "/images/48.png",
+      "128": "/images/128.png"
+    },
     "default_popup": "popup.html",
     "default_title": "BEDAG"
   },
@@ -42,7 +49,9 @@
     "gecko": {
       "id": "bedag@giladfeldman.github",
       "strict_min_version": "109.0",
-      "homepage_url": "https://github.com/giladfeldman/BEDAG"
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   }
 }

@@ -3,6 +3,7 @@
   "manifest_version": 3,
   "name": "BEDAG — Better Default Account Google",
   "description": "Select and manage your default account for Google Meet™, Gmail™, YouTube™, or any other Google™ product.",
+  "homepage_url": "https://github.com/giladfeldman/BEDAG",
   "version": "3.0",
   "icons": {
     "16": "/images/16.png",
@@ -11,6 +12,12 @@
     "128": "/images/128.png"
   },
   "action": {
+    "default_icon": {
+      "16": "/images/16.png",
+      "32": "/images/32.png",
+      "48": "/images/48.png",
+      "128": "/images/128.png"
+    },
     "default_popup": "popup.html"
   },
   "background": {
