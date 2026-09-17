@@ -750,6 +750,18 @@ function saveSetting(key, value) {
 
 // ─── Import / Export ──────────────────────────────────────────────────────────
 
+// popup.html is served both as the toolbar popup and, via ?view=tab, as a full tab.
+// Firefox tears the popup down the moment a file picker or a download prompt opens
+// (bugzilla 1658694, 1384190), so `input[type=file]`'s change event never fires and
+// import silently does nothing. The documented workaround is to run that UI on an
+// extension page that is not a popup — hence the tab.
+const RUNNING_IN_TAB = new URLSearchParams(location.search).get("view") === "tab";
+
+function openImportExportInTab() {
+  chrome.tabs.create({ url: chrome.runtime.getURL("popup.html?view=tab") });
+  window.close();
+}
+
 function initImportExport() {
   const versionEl = document.getElementById("bedag-version");
   if (versionEl) versionEl.textContent = chrome.runtime.getManifest().version;
@@ -758,6 +770,17 @@ function initImportExport() {
   const importBtn = document.getElementById("import-btn");
   const importFile = document.getElementById("import-file");
   if (!exportBtn) return;
+
+  if (!RUNNING_IN_TAB) {
+    // In the popup, both buttons would be dismissed mid-action. Offer the tab instead.
+    const note = document.getElementById("data-popup-note");
+    if (note) note.classList.remove("hidden");
+    exportBtn.textContent = "Open in a tab";
+    exportBtn.onclick = openImportExportInTab;
+    importBtn.textContent = "Open in a tab";
+    importBtn.onclick = openImportExportInTab;
+    return;
+  }
 
   exportBtn.onclick = () => {
     chrome.runtime.sendMessage("export_settings", (data) => {
@@ -795,6 +818,11 @@ function initImportExport() {
     reader.readAsText(file);
     event.target.value = "";
   };
+}
+
+// Opened as a tab purely to do an import or export - go straight there.
+if (RUNNING_IN_TAB) {
+  window.addEventListener("app:ready", () => openSettings("data"), { once: true });
 }
 
 function showStatus(msg, type) {

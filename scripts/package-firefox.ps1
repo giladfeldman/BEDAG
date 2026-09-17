@@ -23,11 +23,11 @@ try {
   & npx web-ext build
   if ($LASTEXITCODE -ne 0) { throw "web-ext build failed (exit $LASTEXITCODE)" }
 
-  $xpiPath = Join-Path $root "dist/bedag-$version.xpi"
+  $xpiPath = Join-Path $root "dist/bedag-$version-unsigned.xpi"
   if (-not (Test-Path $xpiPath)) { throw "Expected package not produced: $xpiPath" }
 
   if ($ZipAlso) {
-    Copy-Item -Path $xpiPath -Destination (Join-Path $root "dist/bedag-$version.zip") -Force
+    Copy-Item -Path $xpiPath -Destination (Join-Path $root "dist/bedag-$version-unsigned.zip") -Force
   }
 
   $bytes = (Get-Item $xpiPath).Length

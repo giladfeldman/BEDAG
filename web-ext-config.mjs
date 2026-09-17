@@ -49,6 +49,6 @@ export default {
   ignoreFiles,
   build: {
     overwriteDest: true,
-    filename: "bedag-{version}.xpi",
+    filename: "bedag-{version}-unsigned.xpi",
   },
 };

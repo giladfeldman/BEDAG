@@ -11,6 +11,26 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-09-17
+
+### Fixed
+
+- **Import and export never worked from the popup on Firefox.** Firefox dismisses an extension
+  popup the moment a file picker or download prompt opens
+  ([bug 1658694](https://bugzilla.mozilla.org/show_bug.cgi?id=1658694),
+  [bug 1384190](https://bugzilla.mozilla.org/show_bug.cgi?id=1384190)), which destroys the page
+  before `input[type=file]` can fire its `change` event — so **Import** appeared to do nothing at
+  all, with no error. Inherited from the upstream Chrome extension, where popups survive a file
+  dialog. Both buttons now open BEDAG in a tab (`popup.html?view=tab`), which is Mozilla's
+  documented workaround, and the tab lands directly on Import / Export.
+
+### Changed
+
+- [docs/INSTALL-XPI.md](docs/INSTALL-XPI.md) now says to **export before removing an add-on and
+  import after installing**. It previously claimed rules carry over because the add-on ID does not
+  change. An unchanged ID is necessary for storage to be reused but not sufficient: uninstalling
+  an add-on deletes the storage held under that ID.
+
 ## [1.0.4] — 2026-09-16
 
 ### Changed
@@ -141,6 +161,7 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 </details>
 
+[1.0.5]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.5
 [1.0.4]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.4
 [1.0.3]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.3
 [1.0.2]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.2
