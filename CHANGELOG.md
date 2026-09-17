@@ -26,6 +26,16 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 ### Changed
 
+- `scripts/check-release-parity.mjs` — asserts that GitHub actually reflects what this repo
+  claims to have released: versions agree across `manifest.json` and `package.json`, every
+  CHANGELOG section has a link reference, every version has a tag that exists **on origin**,
+  every `[x.y.z]:` link points at a release that exists, the current release carries its `.xpi`
+  and `.sha256`, and nothing sits unpushed. Run by `/bedag-cleanup` and `/bedag-deploy`; the
+  offline half runs in `/bedag-qa`. It found that all six released versions had tags but no
+  GitHub releases, so every changelog link 404'd.
+- Build output is now `bedag-<version>-unsigned.xpi`, and the signed copy
+  `bedag-<version>-signed.xpi`. Mozilla returned the signed 1.0.5 under the exact name the
+  unsigned build used, so either could have been shipped in place of the other.
 - [docs/INSTALL-XPI.md](docs/INSTALL-XPI.md) now says to **export before removing an add-on and
   import after installing**. It previously claimed rules carry over because the add-on ID does not
   change. An unchanged ID is necessary for storage to be reused but not sufficient: uninstalling
