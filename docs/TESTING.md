@@ -7,7 +7,8 @@ Load **`manifest.json`** via `about:debugging`. Confirm **BEDAG** appears in `ab
 - [ ] Open popup: profile chips render; **Refresh** loads Google accounts (google.com tab open, signed in)
 - [ ] With **10+ rules**: main view scrolls
 - [ ] **Settings → Rules**: list scrolls; add and delete a rule
-- [ ] **Settings → Import / Export**: export JSON; re-import
+- [ ] **Settings → Import / Export**: both buttons open a new tab (`popup.html?view=tab`), not a file dialog from the popup itself — Firefox dismisses the popup before a picker/download can complete (bug 1658694)
+- [ ] In that tab: export JSON; re-import; with 10+ rules the tab scrolls to reach controls below the fold (regression: 1.0.5 sized the tab like the 480x600 popup with `overflow:hidden`, clipping content with no way to scroll)
 - [ ] Import `examples/legacy-v114-import.example.json` — rules under Default profile
 - [ ] Footer shortcuts point to `about:addons` (not Chrome URLs)
 

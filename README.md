@@ -46,7 +46,7 @@ Then `about:addons` → gear icon → **Install Add-on From File…** → pick t
 
 ### Option B — Unsigned `.xpi` (reload after every restart)
 
-1. Get **`bedag-<version>.xpi`** from [GitHub Releases](https://github.com/giladfeldman/BEDAG/releases).
+1. Get **`bedag-<version>-unsigned.xpi`** from [GitHub Releases](https://github.com/giladfeldman/BEDAG/releases).
 2. Open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → select the `.xpi`.
 3. Follow steps 4–7 below.
 
@@ -74,7 +74,7 @@ After a Firefox restart, load the temporary add-on again (`about:debugging` or r
 .\scripts\package-firefox.ps1
 ```
 
-Output: `dist/bedag-<version>.xpi` (+ `.sha256` checksum). Same temporary-install flow as Option A.
+Output: `dist/bedag-<version>-unsigned.xpi` (+ `.sha256` checksum). Same temporary-install flow as Option B.
 
 ## Quick start
 
