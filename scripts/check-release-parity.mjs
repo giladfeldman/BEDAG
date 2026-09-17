@@ -102,11 +102,26 @@ if (upstream.ok) {
 // ─── Do the releases the CHANGELOG links to actually exist? ──────────────────
 
 if (!LOCAL_ONLY) {
-  const probe = trySh("gh", ["repo", "view", "--json", "nameWithOwner"]);
+  // Pin the repo. A bare `gh` command picks a remote by its own heuristic, and in a
+  // fork with an `upstream` remote it can resolve to the UPSTREAM repository — so the
+  // gate silently answers "does the fork we were forked from have this release?".
+  // Measured 2026-09-17: bare `gh repo view` here returned diegomarzaa/default.wtf,
+  // and the gate reported v1.0.2 as having no release when it has had one since May.
+  const originUrl = trySh("git", ["remote", "get-url", "origin"]);
+  const m = originUrl.ok ? originUrl.out.match(/github\.com[/:]([^/]+\/[^/.]+)/) : null;
+  if (!m) {
+    notes.push("could not derive owner/repo from the origin remote; release checks skipped");
+  }
+  const REPO = m ? m[1] : null;
+  const gh = (args) => trySh("gh", [...args, "--repo", REPO]);
+
+  // `gh repo view` takes the repo POSITIONALLY; --repo is not a flag it accepts.
+  const probe = REPO ? trySh("gh", ["repo", "view", REPO, "--json", "nameWithOwner"]) : { ok: false };
   if (!probe.ok) {
-    notes.push("gh CLI unavailable or not authenticated; release and asset checks skipped");
+    if (REPO) notes.push("gh CLI unavailable or not authenticated; release and asset checks skipped");
   } else {
-    const list = trySh("gh", ["release", "list", "--limit", "100", "--json", "tagName"]);
+    console.log(`  releases checked against: ${JSON.parse(probe.out).nameWithOwner}`);
+    const list = gh(["release", "list", "--limit", "100", "--json", "tagName"]);
     if (!list.ok) {
       notes.push("could not list releases");
     } else {
@@ -120,7 +135,7 @@ if (!LOCAL_ONLY) {
       // The newest release should carry the build the workflow produces.
       const current = `v${manifestVersion}`;
       if (releases.has(current)) {
-        const assets = trySh("gh", ["release", "view", current, "--json", "assets"]);
+        const assets = gh(["release", "view", current, "--json", "assets"]);
         if (assets.ok) {
           const names = JSON.parse(assets.out).assets.map((a) => a.name);
           if (!names.some((n) => n.endsWith(".xpi"))) needsPush(`release ${current} has no .xpi asset (assets: ${names.join(", ") || "none"}).`);
