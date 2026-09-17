@@ -8,6 +8,13 @@
 //
 //   node scripts/check-release-parity.mjs            # report and exit 1 on any failure
 //   node scripts/check-release-parity.mjs --local    # skip checks that need network/gh
+//   node scripts/check-release-parity.mjs --pre-push # only what can be fixed WITHOUT pushing
+//
+// --pre-push exists because /ship forbids pushing before its gate. A cleanup phase
+// running pre-push must not "fix" parity by pushing; it can only fix what lives in
+// the working tree (version agreement, a missing CHANGELOG section or link ref).
+// Anything that needs a push — an unpushed commit, a tag not on origin, a missing
+// release — is reported as DEFERRED and is the deploy phase's job, after the gate.
 //
 // Exit codes: 0 all parity checks pass · 1 a real mismatch · 2 could not verify.
 
@@ -15,7 +22,9 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const LOCAL_ONLY = process.argv.includes("--local");
+const PRE_PUSH = process.argv.includes("--pre-push");
 const failures = [];
+const deferred = [];
 const notes = [];
 
 function sh(cmd, args) {
@@ -29,6 +38,8 @@ function trySh(cmd, args) {
   }
 }
 const fail = (m) => failures.push(m);
+// Needs a push to resolve: a real failure at deploy time, expected before the gate.
+const needsPush = (m) => (PRE_PUSH ? deferred : failures).push(m);
 
 // ─── The versions this repo claims ───────────────────────────────────────────
 
@@ -75,15 +86,15 @@ if (!LOCAL_ONLY) {
 
 for (const v of sections) {
   const tag = `v${v}`;
-  if (!localTags.has(tag)) fail(`${v} is in the CHANGELOG but tag ${tag} does not exist locally.`);
-  else if (remoteTags && !remoteTags.has(tag)) fail(`tag ${tag} exists locally but was never pushed to origin.`);
+  if (!localTags.has(tag)) needsPush(`${v} is in the CHANGELOG but tag ${tag} does not exist yet.`);
+  else if (remoteTags && !remoteTags.has(tag)) needsPush(`tag ${tag} exists locally but was never pushed to origin.`);
 }
 
 const branch = sh("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
 const upstream = trySh("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
 if (upstream.ok) {
   const ahead = sh("git", ["rev-list", "--count", `${upstream.out}..HEAD`]);
-  if (Number(ahead) > 0) fail(`${ahead} commit(s) on ${branch} are not pushed to ${upstream.out}.`);
+  if (Number(ahead) > 0) needsPush(`${ahead} commit(s) on ${branch} are not pushed to ${upstream.out}.`);
 } else {
   notes.push(`${branch} has no upstream branch`);
 }
@@ -103,7 +114,7 @@ if (!LOCAL_ONLY) {
       for (const ref of linkRefs) {
         const tag = `v${ref.version}`;
         if (!releases.has(tag)) {
-          fail(`CHANGELOG links ${ref.url} but no GitHub release ${tag} exists — that link 404s for every reader.`);
+          needsPush(`CHANGELOG links ${ref.url} but no GitHub release ${tag} exists — that link 404s for every reader.`);
         }
       }
       // The newest release should carry the build the workflow produces.
@@ -112,8 +123,8 @@ if (!LOCAL_ONLY) {
         const assets = trySh("gh", ["release", "view", current, "--json", "assets"]);
         if (assets.ok) {
           const names = JSON.parse(assets.out).assets.map((a) => a.name);
-          if (!names.some((n) => n.endsWith(".xpi"))) fail(`release ${current} has no .xpi asset (assets: ${names.join(", ") || "none"}).`);
-          if (!names.some((n) => n.endsWith(".sha256"))) fail(`release ${current} has no .sha256 asset.`);
+          if (!names.some((n) => n.endsWith(".xpi"))) needsPush(`release ${current} has no .xpi asset (assets: ${names.join(", ") || "none"}).`);
+          if (!names.some((n) => n.endsWith(".sha256"))) needsPush(`release ${current} has no .sha256 asset.`);
         }
       }
     }
@@ -122,11 +133,17 @@ if (!LOCAL_ONLY) {
 
 // ─── Report ──────────────────────────────────────────────────────────────────
 
-console.log(`BEDAG release parity — version ${manifestVersion}, branch ${branch}`);
+console.log(`BEDAG release parity — version ${manifestVersion}, branch ${branch}${PRE_PUSH ? " (pre-push)" : ""}`);
 console.log(`  CHANGELOG sections : ${sections.join(", ") || "none"}`);
 console.log(`  local tags         : ${[...localTags].join(", ") || "none"}`);
 console.log(`  remote tags        : ${remoteTags ? [...remoteTags].join(", ") || "none" : "not checked"}`);
 for (const n of notes) console.log(`  NOTE: ${n}`);
+
+if (deferred.length) {
+  console.log(`
+${deferred.length} item(s) DEFERRED to the deploy phase (cannot be fixed without pushing):`);
+  for (const d of deferred) console.log(`  DEFER ${d}`);
+}
 
 if (failures.length) {
   console.log(`\n${failures.length} parity failure(s):`);
@@ -137,4 +154,12 @@ if (notes.length && !LOCAL_ONLY) {
   console.log("\nPASS with gaps — see NOTEs above; those checks did not run.");
   process.exit(2);
 }
-console.log("\nPASS — GitHub matches what this repo says it has released.");
+if (PRE_PUSH) {
+  console.log(
+    deferred.length
+      ? `\nPASS (pre-push) — nothing left that can be fixed without pushing. ${deferred.length} DEFER item(s) are the deploy phase's job; this is NOT a statement that GitHub is up to date.`
+      : "\nPASS (pre-push) — nothing outstanding.",
+  );
+} else {
+  console.log("\nPASS — GitHub matches what this repo says it has released.");
+}

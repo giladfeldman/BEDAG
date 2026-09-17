@@ -1,0 +1,5 @@
+{
+  "targets": [],
+  "note": "BEDAG has no deployed surface. It is a Firefox extension: a person installs a signed .xpi in their own browser, so there is no server, no URL and no live version to compare against. The equivalent of a deploy-drift check here is scripts/check-release-parity.mjs, which asks whether GitHub carries the tags, releases and assets the CHANGELOG claims. That gate runs in bedag-cleanup Phase 3b and bedag-deploy Phase 3.",
+  "noDeployedSurface": true
+}

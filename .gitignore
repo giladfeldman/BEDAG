@@ -40,7 +40,12 @@ desktop.ini
 * 2.*
 
 # Local AI-assistant configuration. Kept out of the repo; not part of the extension.
-.claude/
+# Written as .claude/* rather than .claude/ on purpose: git cannot re-include a
+# file whose parent directory is excluded, and the line below must work.
+.claude/*
+# ...except the record that this project has no deployed surface, which the
+# pre-push drift check reads and which must survive a fresh clone.
+!.claude/deploy-targets.json
 
 # Cursor / local agent (not part of the extension)
 .cursor/
