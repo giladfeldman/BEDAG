@@ -756,6 +756,10 @@ function saveSetting(key, value) {
 // import silently does nothing. The documented workaround is to run that UI on an
 // extension page that is not a popup — hence the tab.
 const RUNNING_IN_TAB = new URLSearchParams(location.search).get("view") === "tab";
+// The stylesheet sizes this document as a 480x600 popup with overflow hidden.
+// As a full tab that would clip the page and leave it unscrollable, so the tab
+// layout is opted into explicitly rather than applied to both.
+if (RUNNING_IN_TAB) document.documentElement.classList.add("as-tab");
 
 function openImportExportInTab() {
   chrome.tabs.create({ url: chrome.runtime.getURL("popup.html?view=tab") });

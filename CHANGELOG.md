@@ -11,6 +11,17 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 ## [Unreleased]
 
+## [1.0.6] — 2026-09-17
+
+### Fixed
+
+- **The import / export tab was clipped.** `popup.html` doubles as a full page via
+  `?view=tab` (1.0.5), but the stylesheet sized the document as a 480x600 popup with
+  `overflow: hidden` on both `html` and `body` — so in a tab the page rendered as a small
+  fixed box and anything past 600px was unreachable, with no way to scroll to it. The tab
+  layout is now opted into explicitly with an `as-tab` class rather than inherited from the
+  popup. Found by `/bedag-review` reading `styles.css` outside the diff.
+
 ## [1.0.5] — 2026-09-17
 
 ### Fixed
@@ -171,6 +182,7 @@ Earlier development used internal version numbers (2.x); that history is summari
 
 </details>
 
+[1.0.6]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.6
 [1.0.5]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.5
 [1.0.4]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.4
 [1.0.3]: https://github.com/giladfeldman/BEDAG/releases/tag/v1.0.3

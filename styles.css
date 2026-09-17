@@ -53,6 +53,21 @@ input  { font-family: inherit; }
 .link { color: inherit; text-decoration: none; }
 .hidden { display: none !important; }
 
+/* popup.html doubles as a full page (?view=tab) for import / export, because
+   Firefox destroys an extension popup the moment a file dialog opens. The popup
+   sizing above would render that page as a clipped, unscrollable 480x600 box. */
+html.as-tab,
+html.as-tab body {
+  overflow: auto;
+  height: auto;
+  max-height: none;
+}
+html.as-tab body {
+  width: min(680px, 100%);
+  min-height: 100vh;
+  margin: 0 auto;
+}
+
 /* ─── Header ───────────────────────────────────────────────────────────────── */
 header {
   flex-shrink: 0;
